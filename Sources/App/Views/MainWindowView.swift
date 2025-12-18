@@ -6,6 +6,10 @@ import PS5GamePadMapperCore
 struct MainWindowView: View {
     @StateObject private var viewModel: MainWindowViewModel
     @State private var showMappingEditor = false
+    @State private var showMacroEditor = false
+    @State private var showDebugPanel = false
+    @State private var editingMacro: Macro?
+    @State private var editingScript: Script?
     
     /// Initialize with the app coordinator
     init(coordinator: AppCoordinator) {
@@ -63,6 +67,25 @@ struct MainWindowView: View {
             .padding()
         }
         .frame(minWidth: 800, minHeight: 600)
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    editingMacro = nil
+                    editingScript = nil
+                    showMacroEditor = true
+                } label: {
+                    Label("宏编辑器", systemImage: "list.bullet.rectangle")
+                }
+                .help("创建或编辑宏和脚本")
+                
+                Button {
+                    showDebugPanel = true
+                } label: {
+                    Label("调试面板", systemImage: "ladybug")
+                }
+                .help("查看输入事件和调试信息")
+            }
+        }
         .onAppear {
             viewModel.startMonitoring()
         }
@@ -81,6 +104,19 @@ struct MainWindowView: View {
                     }
                 )
             }
+        }
+        .sheet(isPresented: $showMacroEditor) {
+            MacroEditorView(
+                macro: $editingMacro,
+                script: $editingScript,
+                onSave: { macro, script in
+                    viewModel.saveMacroOrScript(macro: macro, script: script)
+                }
+            )
+        }
+        .sheet(isPresented: $showDebugPanel) {
+            DebugPanelView()
+                .frame(minWidth: 500, minHeight: 400)
         }
     }
 }
@@ -184,6 +220,40 @@ class MainWindowViewModel: ObservableObject {
         do {
             try coordinator.profileManager.saveProfile(profile)
             // Re-activate the profile to apply changes
+            coordinator.profileManager.setActiveProfile(profile)
+        } catch {
+            print("Failed to save profile: \(error)")
+        }
+    }
+    
+    /// Save a macro or script to the current profile
+    func saveMacroOrScript(macro: Macro?, script: Script?) {
+        guard var profile = selectedProfile else { return }
+        
+        if let macro = macro {
+            // Update or add macro
+            if let index = profile.macros.firstIndex(where: { $0.id == macro.id }) {
+                profile.macros[index] = macro
+            } else {
+                profile.macros.append(macro)
+            }
+        }
+        
+        if let script = script {
+            // Update or add script
+            if let index = profile.scripts.firstIndex(where: { $0.id == script.id }) {
+                profile.scripts[index] = script
+            } else {
+                profile.scripts.append(script)
+            }
+        }
+        
+        // Update the profile
+        selectedProfile = profile
+        
+        // Save immediately
+        do {
+            try coordinator.profileManager.saveProfile(profile)
             coordinator.profileManager.setActiveProfile(profile)
         } catch {
             print("Failed to save profile: \(error)")
