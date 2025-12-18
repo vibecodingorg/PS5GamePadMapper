@@ -42,18 +42,21 @@ struct KeyCaptureView: View {
                     .font(.caption)
                     .foregroundColor(.accentColor)
             }
+            
+            // Key capture handler - needs a minimum size to receive events
+            if isCapturing {
+                KeyCaptureHandler(
+                    isCapturing: $isCapturing,
+                    onKeyCaptured: { capturedKeyCode, capturedModifiers in
+                        keyCode = capturedKeyCode
+                        modifiers = capturedModifiers
+                        isCapturing = false
+                        onKeyChanged()
+                    }
+                )
+                .frame(width: 1, height: 1)
+            }
         }
-        .background(
-            KeyCaptureHandler(
-                isCapturing: $isCapturing,
-                onKeyCaptured: { capturedKeyCode, capturedModifiers in
-                    keyCode = capturedKeyCode
-                    modifiers = capturedModifiers
-                    isCapturing = false
-                    onKeyChanged()
-                }
-            )
-        )
     }
     
     private var keyDisplayString: String {
@@ -72,7 +75,7 @@ struct KeyCaptureView: View {
     }
 }
 
-/// NSViewRepresentable for capturing keyboard events
+/// NSViewRepresentable for capturing keyboard events using local event monitor
 struct KeyCaptureHandler: NSViewRepresentable {
     @Binding var isCapturing: Bool
     let onKeyCaptured: (UInt16, KeyModifiers) -> Void
@@ -84,57 +87,71 @@ struct KeyCaptureHandler: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: KeyCaptureNSView, context: Context) {
-        nsView.isCapturing = isCapturing
         nsView.onKeyCaptured = onKeyCaptured
-        
-        if isCapturing {
-            DispatchQueue.main.async {
-                nsView.window?.makeFirstResponder(nsView)
-            }
-        }
+        nsView.updateCapturing(isCapturing)
+    }
+    
+    static func dismantleNSView(_ nsView: KeyCaptureNSView, coordinator: ()) {
+        nsView.stopMonitoring()
     }
 }
 
-/// Custom NSView for capturing keyboard events
+/// Custom NSView for capturing keyboard events using local event monitor
 class KeyCaptureNSView: NSView {
-    var isCapturing: Bool = false
+    private var eventMonitor: Any?
     var onKeyCaptured: ((UInt16, KeyModifiers) -> Void)?
     
-    override var acceptsFirstResponder: Bool { true }
-    
-    override func keyDown(with event: NSEvent) {
-        guard isCapturing else {
-            super.keyDown(with: event)
-            return
+    func updateCapturing(_ isCapturing: Bool) {
+        if isCapturing {
+            startMonitoring()
+        } else {
+            stopMonitoring()
         }
-        
-        // Ignore modifier-only key presses
-        let modifierOnlyKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
-        if modifierOnlyKeyCodes.contains(event.keyCode) {
-            return
-        }
-        
-        // Convert NSEvent modifiers to KeyModifiers
-        var keyModifiers: KeyModifiers = []
-        if event.modifierFlags.contains(.command) {
-            keyModifiers.insert(.command)
-        }
-        if event.modifierFlags.contains(.control) {
-            keyModifiers.insert(.control)
-        }
-        if event.modifierFlags.contains(.option) {
-            keyModifiers.insert(.option)
-        }
-        if event.modifierFlags.contains(.shift) {
-            keyModifiers.insert(.shift)
-        }
-        
-        onKeyCaptured?(event.keyCode, keyModifiers)
     }
     
-    override func flagsChanged(with event: NSEvent) {
-        // Don't capture modifier-only presses
-        super.flagsChanged(with: event)
+    func startMonitoring() {
+        guard eventMonitor == nil else { return }
+        
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self else { return event }
+            
+            // Ignore modifier-only key presses
+            let modifierOnlyKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+            if modifierOnlyKeyCodes.contains(event.keyCode) {
+                return event
+            }
+            
+            // Convert NSEvent modifiers to KeyModifiers
+            var keyModifiers: KeyModifiers = []
+            if event.modifierFlags.contains(.command) {
+                keyModifiers.insert(.command)
+            }
+            if event.modifierFlags.contains(.control) {
+                keyModifiers.insert(.control)
+            }
+            if event.modifierFlags.contains(.option) {
+                keyModifiers.insert(.option)
+            }
+            if event.modifierFlags.contains(.shift) {
+                keyModifiers.insert(.shift)
+            }
+            
+            self.onKeyCaptured?(event.keyCode, keyModifiers)
+            
+            // Return nil to consume the event (prevent it from being processed further)
+            return nil
+        }
+    }
+    
+    func stopMonitoring() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+    }
+    
+    deinit {
+        stopMonitoring()
     }
 }
 
