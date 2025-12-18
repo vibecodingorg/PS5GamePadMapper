@@ -7,6 +7,7 @@ struct ProfileSelectorView: View {
     @Binding var selectedProfile: Profile?
     let profiles: [Profile]
     let onProfileSelected: (Profile) -> Void
+    var onCreateProfile: (() -> Void)?
     
     var body: some View {
         HStack {
@@ -37,7 +38,8 @@ struct ProfileSelectorView: View {
                 Divider()
                 
                 Button(action: {
-                    // Create new profile action - to be implemented in Mapping Editor
+                    print("[ProfileSelectorView] 新建配置文件 button clicked, onCreateProfile is \(onCreateProfile == nil ? "nil" : "set")")
+                    onCreateProfile?()
                 }) {
                     Label("新建配置文件...", systemImage: "plus")
                 }
@@ -55,6 +57,40 @@ struct ProfileSelectorView: View {
             }
             .menuStyle(.borderlessButton)
         }
+    }
+}
+
+/// Sheet for creating a new profile
+struct NewProfileSheet: View {
+    @Binding var profileName: String
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("新建配置文件")
+                .font(.headline)
+            
+            TextField("配置文件名称", text: $profileName)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 250)
+            
+            HStack(spacing: 16) {
+                Button("取消") {
+                    onCancel()
+                }
+                .keyboardShortcut(.cancelAction)
+                
+                Button("创建") {
+                    onSave()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(profileName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(30)
+        .frame(minWidth: 300)
     }
 }
 

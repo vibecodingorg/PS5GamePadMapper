@@ -5,10 +5,11 @@ import PS5GamePadMapperCore
 /// Requirements: 15.1, 15.2, 15.3, 15.4
 struct DebugPanelView: View {
     @StateObject private var viewModel = DebugPanelViewModel()
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Header
+            // Header with proper spacing and close button
             HStack {
                 Text("调试面板")
                     .font(.headline)
@@ -17,8 +18,18 @@ struct DebugPanelView: View {
                     viewModel.clearLogs()
                 }
                 .buttonStyle(.bordered)
+                
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                        .font(.title2)
+                }
+                .buttonStyle(.plain)
+                .help("关闭调试面板")
             }
-            .padding(.horizontal)
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 8)
             
             Divider()
             

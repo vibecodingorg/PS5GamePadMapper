@@ -1,15 +1,26 @@
 import SwiftUI
+import AppKit
 import PS5GamePadMapperCore
+
+/// Custom NSWindow subclass that always accepts key status
+class KeyableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+    
+    override var acceptsFirstResponder: Bool { true }
+}
 
 /// Main window view combining all UI components
 /// Requirements: 18.1, 18.2, 18.3, 18.4, 18.5
 struct MainWindowView: View {
     @StateObject private var viewModel: MainWindowViewModel
     @State private var showMappingEditor = false
-    @State private var showMacroEditor = false
     @State private var showDebugPanel = false
     @State private var editingMacro: Macro?
     @State private var editingScript: Script?
+    
+    // Window controller for macro editor
+    @State private var macroEditorWindow: NSWindow?
     
     /// Initialize with the app coordinator
     init(coordinator: AppCoordinator) {
@@ -23,7 +34,8 @@ struct MainWindowView: View {
                 controller: viewModel.connectedController,
                 selectedProfile: $viewModel.selectedProfile,
                 profiles: viewModel.profiles,
-                onProfileSelected: viewModel.selectProfile
+                onProfileSelected: viewModel.selectProfile,
+                onCreateProfile: viewModel.createProfile
             )
             .padding()
             
@@ -72,7 +84,7 @@ struct MainWindowView: View {
                 Button {
                     editingMacro = nil
                     editingScript = nil
-                    showMacroEditor = true
+                    openMacroEditorWindow()
                 } label: {
                     Label("宏编辑器", systemImage: "list.bullet.rectangle")
                 }
@@ -91,32 +103,67 @@ struct MainWindowView: View {
         }
         .onDisappear {
             viewModel.stopMonitoring()
+            macroEditorWindow?.close()
         }
         .sheet(isPresented: $showMappingEditor) {
             if let input = viewModel.selectedInput {
+                let macros = viewModel.selectedProfile?.macros ?? []
+                let scripts = viewModel.selectedProfile?.scripts ?? []
+                let _ = print("[MainWindowView] Opening MappingEditorView - profile: \(viewModel.selectedProfile?.name ?? "nil"), macros: \(macros.count), scripts: \(scripts.count)")
                 MappingEditorView(
                     input: input,
                     currentMapping: viewModel.selectedMapping,
-                    availableMacros: viewModel.selectedProfile?.macros ?? [],
-                    availableScripts: viewModel.selectedProfile?.scripts ?? [],
+                    availableMacros: macros,
+                    availableScripts: scripts,
                     onMappingChanged: { mapping in
                         viewModel.updateMapping(for: input, mapping: mapping)
                     }
                 )
             }
         }
-        .sheet(isPresented: $showMacroEditor) {
-            MacroEditorView(
-                macro: $editingMacro,
-                script: $editingScript,
-                onSave: { macro, script in
-                    viewModel.saveMacroOrScript(macro: macro, script: script)
-                }
-            )
-        }
         .sheet(isPresented: $showDebugPanel) {
             DebugPanelView()
                 .frame(minWidth: 500, minHeight: 400)
+        }
+    }
+    
+    /// Open macro editor in a separate window to avoid sheet keyboard input issues
+    private func openMacroEditorWindow() {
+        // Close existing window if any
+        macroEditorWindow?.close()
+        
+        // Create window first so we can reference it in closures
+        let window = KeyableWindow(contentRect: NSRect(x: 0, y: 0, width: 550, height: 600),
+                                   styleMask: [.titled, .closable, .resizable],
+                                   backing: .buffered,
+                                   defer: false)
+        window.title = "宏/脚本编辑器"
+        window.center()
+        window.isReleasedWhenClosed = false
+        
+        macroEditorWindow = window
+        
+        let editorView = MacroEditorView(
+            macro: $editingMacro,
+            script: $editingScript,
+            onSave: { [weak viewModel, weak window] macro, script in
+                viewModel?.saveMacroOrScript(macro: macro, script: script)
+                window?.close()
+            },
+            onCancel: { [weak window] in
+                window?.close()
+            }
+        )
+        
+        let hostingController = NSHostingController(rootView: editorView)
+        window.contentViewController = hostingController
+        
+        // Show window and activate
+        window.orderFront(nil)
+        
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
         }
     }
 }
@@ -127,6 +174,10 @@ struct TopBarView: View {
     @Binding var selectedProfile: Profile?
     let profiles: [Profile]
     let onProfileSelected: (Profile) -> Void
+    var onCreateProfile: ((String) -> Void)?
+    
+    @State private var showingNewProfileSheet = false
+    @State private var newProfileName = ""
     
     var body: some View {
         HStack {
@@ -137,8 +188,33 @@ struct TopBarView: View {
             ProfileSelectorView(
                 selectedProfile: $selectedProfile,
                 profiles: profiles,
-                onProfileSelected: onProfileSelected
+                onProfileSelected: onProfileSelected,
+                onCreateProfile: {
+                    print("[TopBarView] onCreateProfile callback triggered")
+                    showingNewProfileSheet = true
+                }
             )
+        }
+        .sheet(isPresented: $showingNewProfileSheet) {
+            NewProfileSheet(
+                profileName: $newProfileName,
+                onSave: {
+                    print("[TopBarView] NewProfileSheet onSave - name: \(newProfileName)")
+                    if !newProfileName.trimmingCharacters(in: .whitespaces).isEmpty {
+                        onCreateProfile?(newProfileName)
+                    }
+                    showingNewProfileSheet = false
+                    newProfileName = ""
+                },
+                onCancel: {
+                    print("[TopBarView] NewProfileSheet onCancel")
+                    showingNewProfileSheet = false
+                    newProfileName = ""
+                }
+            )
+        }
+        .onChange(of: showingNewProfileSheet) { newValue in
+            print("[TopBarView] showingNewProfileSheet changed to: \(newValue)")
         }
     }
 }
@@ -200,6 +276,29 @@ class MainWindowViewModel: ObservableObject {
         selectedInput = input
     }
     
+    /// Create a new profile with the given name
+    func createProfile(name: String) {
+        print("[MainWindowViewModel] createProfile called - name: \(name)")
+        
+        let newProfile = Profile(name: name)
+        
+        do {
+            try coordinator.profileManager.saveProfile(newProfile)
+            print("[MainWindowViewModel] New profile saved successfully")
+            
+            // Add to local profiles array
+            profiles.append(newProfile)
+            
+            // Select the new profile
+            selectedProfile = newProfile
+            coordinator.profileManager.setActiveProfile(newProfile)
+            
+            print("[MainWindowViewModel] New profile created and selected: \(newProfile.name)")
+        } catch {
+            print("[MainWindowViewModel] ERROR: Failed to create profile: \(error)")
+        }
+    }
+    
     /// Update or remove a mapping for the given input
     /// Requirements: 19.2 - Apply change immediately without requiring a save action
     func updateMapping(for input: InputSource, mapping: Mapping?) {
@@ -228,13 +327,22 @@ class MainWindowViewModel: ObservableObject {
     
     /// Save a macro or script to the current profile
     func saveMacroOrScript(macro: Macro?, script: Script?) {
-        guard var profile = selectedProfile else { return }
+        print("[MainWindowViewModel] saveMacroOrScript called - macro: \(macro?.name ?? "nil"), script: \(script?.name ?? "nil")")
+        
+        guard var profile = selectedProfile else {
+            print("[MainWindowViewModel] ERROR: No selectedProfile!")
+            return
+        }
+        
+        print("[MainWindowViewModel] Current profile: \(profile.name), macros: \(profile.macros.count), scripts: \(profile.scripts.count)")
         
         if let macro = macro {
             // Update or add macro
             if let index = profile.macros.firstIndex(where: { $0.id == macro.id }) {
+                print("[MainWindowViewModel] Updating existing macro at index \(index)")
                 profile.macros[index] = macro
             } else {
+                print("[MainWindowViewModel] Adding new macro")
                 profile.macros.append(macro)
             }
         }
@@ -242,21 +350,36 @@ class MainWindowViewModel: ObservableObject {
         if let script = script {
             // Update or add script
             if let index = profile.scripts.firstIndex(where: { $0.id == script.id }) {
+                print("[MainWindowViewModel] Updating existing script at index \(index)")
                 profile.scripts[index] = script
             } else {
+                print("[MainWindowViewModel] Adding new script")
                 profile.scripts.append(script)
             }
         }
         
-        // Update the profile
-        selectedProfile = profile
+        print("[MainWindowViewModel] After update - macros: \(profile.macros.count), scripts: \(profile.scripts.count)")
         
         // Save immediately
         do {
             try coordinator.profileManager.saveProfile(profile)
+            print("[MainWindowViewModel] Profile saved successfully")
+            
+            // Update local profiles array to stay in sync
+            if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+                profiles[index] = profile
+                print("[MainWindowViewModel] Updated profiles array at index \(index)")
+            }
+            
+            // Update selectedProfile after saving to ensure consistency
+            selectedProfile = profile
+            print("[MainWindowViewModel] Updated selectedProfile - macros: \(selectedProfile?.macros.count ?? 0), scripts: \(selectedProfile?.scripts.count ?? 0)")
+            
+            // Re-activate the profile to apply changes
             coordinator.profileManager.setActiveProfile(profile)
+            print("[MainWindowViewModel] Profile re-activated")
         } catch {
-            print("Failed to save profile: \(error)")
+            print("[MainWindowViewModel] ERROR: Failed to save profile: \(error)")
         }
     }
     
@@ -303,7 +426,16 @@ class MainWindowViewModel: ObservableObject {
         // Update UI when profile changes
         coordinator.profileManager.onProfileDidChange = { [weak self] profile in
             Task { @MainActor in
-                self?.selectedProfile = profile
+                guard let self = self else { return }
+                // Only update if the profile is different to avoid unnecessary re-renders
+                if self.selectedProfile?.id != profile?.id || self.selectedProfile != profile {
+                    self.selectedProfile = profile
+                    // Also update the profiles array to stay in sync
+                    if let profile = profile,
+                       let index = self.profiles.firstIndex(where: { $0.id == profile.id }) {
+                        self.profiles[index] = profile
+                    }
+                }
             }
         }
         

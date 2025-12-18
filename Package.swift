@@ -25,7 +25,10 @@ let package = Package(
         .executableTarget(
             name: "PS5GamePadMapper",
             dependencies: ["PS5GamePadMapperCore"],
-            path: "Sources/App"
+            path: "Sources/App",
+            resources: [
+                .copy("../../Resources/Info.plist")
+            ]
         ),
         .target(
             name: "PS5GamePadMapperCore",

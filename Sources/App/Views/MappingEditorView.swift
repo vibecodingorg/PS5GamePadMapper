@@ -95,6 +95,7 @@ struct MappingEditorView: View {
         }
         .frame(width: 450, height: 550)
         .onAppear {
+            print("[MappingEditorView] onAppear - availableMacros: \(availableMacros.count), availableScripts: \(availableScripts.count)")
             loadCurrentMapping()
         }
     }
@@ -340,6 +341,9 @@ struct MappingEditorView: View {
                 Text("暂无可用宏。请在宏编辑器中创建。")
                     .foregroundColor(.secondary)
                     .italic()
+                    .onAppear {
+                        print("[MappingEditorView] macroActionConfiguration - availableMacros is EMPTY")
+                    }
             } else {
                 Picker("选择宏", selection: $selectedMacroId) {
                     Text("无").tag(nil as UUID?)
@@ -349,6 +353,12 @@ struct MappingEditorView: View {
                 }
                 .onChange(of: selectedMacroId) { _ in
                     applyMappingChange()
+                }
+                .onAppear {
+                    print("[MappingEditorView] macroActionConfiguration - availableMacros count: \(availableMacros.count)")
+                    for macro in availableMacros {
+                        print("[MappingEditorView]   - Macro: \(macro.name), id: \(macro.id)")
+                    }
                 }
                 
                 if let macroId = selectedMacroId,

@@ -91,27 +91,36 @@ public final class ProfileManager: ProfileManagerProtocol {
     /// Save a profile to storage
     /// Requirements: 13.1 - Write configuration to local JSON file
     public func saveProfile(_ profile: Profile) throws {
+        print("[ProfileManager] saveProfile called - name: \(profile.name), macros: \(profile.macros.count), scripts: \(profile.scripts.count)")
+        
         guard !profile.name.trimmingCharacters(in: .whitespaces).isEmpty else {
             throw ProfileManagerError.profileNameEmpty
         }
         
         let fileURL = profileURL(for: profile.name)
+        print("[ProfileManager] Saving to: \(fileURL.path)")
         
         do {
             let data = try encoder.encode(profile)
             try data.write(to: fileURL, options: .atomic)
+            print("[ProfileManager] File written successfully, size: \(data.count) bytes")
             
             // Update profiles list
             if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
                 profiles[index] = profile
+                print("[ProfileManager] Updated profiles array at index \(index)")
             } else {
                 profiles.append(profile)
+                print("[ProfileManager] Appended new profile to array")
             }
             
             // Update active profile if it's the same one
             if activeProfile?.id == profile.id {
                 activeProfile = profile
+                print("[ProfileManager] Updated activeProfile")
             }
+            
+            print("[ProfileManager] After save - profiles count: \(profiles.count), activeProfile macros: \(activeProfile?.macros.count ?? 0)")
         } catch is EncodingError {
             throw ProfileManagerError.invalidProfileData
         } catch {

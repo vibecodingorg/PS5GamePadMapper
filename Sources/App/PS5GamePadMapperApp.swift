@@ -49,6 +49,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     /// Handle app launch with permission checks
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // CRITICAL: Set activation policy to regular app so it appears in Dock
+        // and can properly receive keyboard input
+        NSApp.setActivationPolicy(.regular)
+        
+        // Activate the app
+        NSApp.activate(ignoringOtherApps: true)
+        
         // Permission checks are handled by AppState.checkPermissions()
         // which is called when ContentView appears
     }

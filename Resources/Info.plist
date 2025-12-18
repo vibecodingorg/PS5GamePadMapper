@@ -23,6 +23,10 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     
+    <!-- Ensure app appears in Dock and can receive keyboard input -->
+    <key>LSUIElement</key>
+    <false/>
+    
     <!-- Accessibility Permission - Required for simulating keyboard/mouse events -->
     <!-- Requirements: 16.1, 16.2 -->
     <key>NSAccessibilityUsageDescription</key>
