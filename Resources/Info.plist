@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>PS5GamePadMapper</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.developer.PS5GamePadMapper</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>PS5 GamePad Mapper</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    
+    <!-- Accessibility Permission - Required for simulating keyboard/mouse events -->
+    <!-- Requirements: 16.1, 16.2 -->
+    <key>NSAccessibilityUsageDescription</key>
+    <string>PS5 GamePad Mapper needs Accessibility permission to simulate keyboard and mouse events based on your controller input mappings.</string>
+    
+    <!-- Bluetooth Permission - Required for Bluetooth controller detection -->
+    <!-- Requirements: 16.3 -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>PS5 GamePad Mapper needs Bluetooth permission to detect and connect to your PS5 DualSense controller wirelessly.</string>
+    
+    <!-- HID Device Access -->
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2024. All rights reserved.</string>
+</dict>
+</plist>
