@@ -12,12 +12,17 @@ class KeyableWindow: NSWindow {
 
 /// Main window view combining all UI components
 /// Requirements: 18.1, 18.2, 18.3, 18.4, 18.5
+/// Requirements: 3.1, 3.2, 3.4, 3.5 - Direction selector integration
 struct MainWindowView: View {
     @StateObject private var viewModel: MainWindowViewModel
     @State private var showMappingEditor = false
     @State private var showDebugPanel = false
     @State private var editingMacro: Macro?
     @State private var editingScript: Script?
+    
+    // Direction selector state
+    @State private var showDirectionSelector = false
+    @State private var selectedStickForDirection: StickType?
     
     // Window controller for macro editor
     @State private var macroEditorWindow: NSWindow?
@@ -53,7 +58,12 @@ struct MainWindowView: View {
                         selectedInput: $viewModel.selectedInput,
                         onInputSelected: viewModel.selectInput,
                         pressedButtons: viewModel.pressedButtons,
-                        axisValues: viewModel.axisValues
+                        axisValues: viewModel.axisValues,
+                        configuredDirections: viewModel.configuredDirections,
+                        onStickDirectionTapped: { stick in
+                            selectedStickForDirection = stick
+                            showDirectionSelector = true
+                        }
                     )
                     .padding()
                 }
@@ -124,6 +134,26 @@ struct MainWindowView: View {
         .sheet(isPresented: $showDebugPanel) {
             DebugPanelView()
                 .frame(minWidth: 500, minHeight: 400)
+        }
+        .sheet(isPresented: $showDirectionSelector) {
+            if let stick = selectedStickForDirection {
+                DirectionSelectorView(
+                    stick: stick,
+                    currentX: viewModel.axisValues[stick == .left ? .leftStickX : .rightStickX] ?? 0,
+                    currentY: -(viewModel.axisValues[stick == .left ? .leftStickY : .rightStickY] ?? 0),
+                    configuredDirections: viewModel.configuredDirections[stick] ?? [],
+                    onDirectionSelected: { direction in
+                        // Create direction input and open mapping editor
+                        let directionInput = DirectionInput(stick: stick, direction: direction)
+                        viewModel.selectedInput = .direction(directionInput)
+                        showDirectionSelector = false
+                        showMappingEditor = true
+                    },
+                    onDismiss: {
+                        showDirectionSelector = false
+                    }
+                )
+            }
         }
     }
     
@@ -245,6 +275,24 @@ class MainWindowViewModel: ObservableObject {
             return nil
         }
         return profile.mappings.first { $0.input == input }
+    }
+    
+    /// Get configured directions for each stick from the current profile
+    /// Requirements: 3.3 - Visually indicate which directions have configured mappings
+    var configuredDirections: [StickType: Set<StickDirection>] {
+        guard let profile = selectedProfile else {
+            return [:]
+        }
+        
+        var result: [StickType: Set<StickDirection>] = [.left: [], .right: []]
+        
+        for mapping in profile.mappings {
+            if case .direction(let dirInput) = mapping.input {
+                result[dirInput.stick, default: []].insert(dirInput.direction)
+            }
+        }
+        
+        return result
     }
     
     // MARK: - Initialization

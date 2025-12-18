@@ -69,6 +69,8 @@ struct InputInfoSection: View {
             return buttonType.displayName
         case .axis(let axisType):
             return axisType.displayName
+        case .direction(let directionInput):
+            return "\(directionInput.stick.displayName) \(directionInput.direction.displayName)"
         }
     }
     
@@ -78,6 +80,8 @@ struct InputInfoSection: View {
             return "按钮"
         case .axis(let axisType):
             return axisType.isTrigger ? "扳机" : "摇杆"
+        case .direction:
+            return "方向"
         }
     }
     
@@ -87,6 +91,8 @@ struct InputInfoSection: View {
             return "button.programmable"
         case .axis(let axisType):
             return axisType.isTrigger ? "slider.horizontal.3" : "circle.circle"
+        case .direction:
+            return "arrow.up.left.and.arrow.down.right"
         }
     }
 }
@@ -365,6 +371,30 @@ extension KeyModifiers {
         if contains(.option) { parts.append("⌥") }
         if contains(.shift) { parts.append("⇧") }
         return parts.joined(separator: " + ")
+    }
+}
+
+extension StickType {
+    var displayName: String {
+        switch self {
+        case .left: return "左摇杆"
+        case .right: return "右摇杆"
+        }
+    }
+}
+
+extension StickDirection {
+    var displayName: String {
+        switch self {
+        case .up: return "上"
+        case .down: return "下"
+        case .left: return "左"
+        case .right: return "右"
+        case .upLeft: return "左上"
+        case .upRight: return "右上"
+        case .downLeft: return "左下"
+        case .downRight: return "右下"
+        }
     }
 }
 

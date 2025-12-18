@@ -54,9 +54,10 @@ public enum TriggerMode: Codable, Equatable {
 }
 
 /// Input source for mappings
-public enum InputSource: Codable, Equatable {
+public enum InputSource: Codable, Equatable, Hashable {
     case button(ButtonType)
     case axis(AxisType)
+    case direction(DirectionInput)
 }
 
 /// All possible mapping actions

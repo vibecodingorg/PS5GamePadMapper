@@ -139,6 +139,8 @@ struct MappingEditorView: View {
             return buttonType.displayName
         case .axis(let axisType):
             return axisType.displayName
+        case .direction(let directionInput):
+            return "\(directionInput.stick.displayName) \(directionInput.direction.displayName)"
         }
     }
     
@@ -148,6 +150,8 @@ struct MappingEditorView: View {
             return "button.programmable"
         case .axis(let axisType):
             return axisType.isTrigger ? "slider.horizontal.3" : "circle.circle"
+        case .direction:
+            return "arrow.up.left.and.arrow.down.right"
         }
     }
     

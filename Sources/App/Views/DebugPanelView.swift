@@ -58,6 +58,13 @@ struct DebugPanelView: View {
                     .tabItem {
                         Label("轴", systemImage: "slider.horizontal.3")
                     }
+                
+                // Direction State Tab
+                /// Requirements: 8.1, 8.2, 8.3, 8.4 - Direction state display
+                directionStateTab
+                    .tabItem {
+                        Label("方向", systemImage: "arrow.up.left.and.arrow.down.right")
+                    }
             }
             .padding()
         }
@@ -236,6 +243,57 @@ struct DebugPanelView: View {
             Spacer()
         }
     }
+    
+    // MARK: - Direction State Tab
+    
+    /// Display direction state for both sticks
+    /// Requirements: 8.1, 8.2, 8.3, 8.4 - Direction state display and event logging
+    private var directionStateTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Current direction state section
+            Text("当前方向状态")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 16) {
+                // Left stick direction state
+                StickDirectionStateCard(
+                    stickName: "左摇杆",
+                    state: viewModel.leftStickDirectionState
+                )
+                
+                // Right stick direction state
+                StickDirectionStateCard(
+                    stickName: "右摇杆",
+                    state: viewModel.rightStickDirectionState
+                )
+            }
+            
+            Divider()
+            
+            // Direction events log section
+            Text("方向事件日志")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.directionEvents) { event in
+                            InputEventRow(event: event)
+                        }
+                    }
+                }
+                .onChange(of: viewModel.directionEvents.count) { _ in
+                    if let lastEvent = viewModel.directionEvents.last {
+                        withAnimation {
+                            proxy.scrollTo(lastEvent.id, anchor: .bottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 
@@ -251,8 +309,8 @@ struct InputEventRow: View {
                 .font(.system(.caption, design: .monospaced))
                 .foregroundColor(.secondary)
             
-            Image(systemName: event.isButton ? "circle.fill" : "slider.horizontal.3")
-                .foregroundColor(event.isButton ? .blue : .orange)
+            Image(systemName: inputIcon)
+                .foregroundColor(inputColor)
                 .font(.caption)
             
             Text(event.inputName)
@@ -263,6 +321,26 @@ struct InputEventRow: View {
         }
         .padding(.vertical, 2)
         .id(event.id)
+    }
+    
+    private var inputIcon: String {
+        if event.isDirection {
+            return "arrow.up.left.and.arrow.down.right"
+        } else if event.isButton {
+            return "circle.fill"
+        } else {
+            return "slider.horizontal.3"
+        }
+    }
+    
+    private var inputColor: Color {
+        if event.isDirection {
+            return .purple
+        } else if event.isButton {
+            return .blue
+        } else {
+            return .orange
+        }
     }
 }
 
@@ -285,6 +363,14 @@ struct ActionEventRow: View {
             
             Text(event.details)
                 .foregroundColor(.secondary)
+            
+            // Show direction context if available
+            /// Requirements: 8.4 - Log triggered actions for direction mappings
+            if let directionContext = event.directionContext {
+                Text("[\(directionContext)]")
+                    .font(.caption)
+                    .foregroundColor(.purple)
+            }
         }
         .padding(.vertical, 2)
         .id(event.id)
@@ -471,6 +557,64 @@ struct AxisValueCard: View {
     }
 }
 
+/// Card view for displaying stick direction state
+/// Requirements: 8.1, 8.2, 8.3 - Display direction name, angle, and magnitude
+struct StickDirectionStateCard: View {
+    let stickName: String
+    let state: StickDirectionState
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Stick name header
+            Text(stickName)
+                .font(.headline)
+            
+            // Direction name
+            HStack {
+                Text("方向:")
+                    .foregroundColor(.secondary)
+                Text(state.activeDirection?.rawValue ?? "无")
+                    .fontWeight(.medium)
+                    .foregroundColor(state.activeDirection != nil ? .green : .secondary)
+            }
+            
+            // Angle display
+            /// Requirements: 8.2 - Show the current angle in degrees
+            HStack {
+                Text("角度:")
+                    .foregroundColor(.secondary)
+                Text(state.formattedAngle)
+                    .font(.system(.body, design: .monospaced))
+            }
+            
+            // Magnitude display
+            /// Requirements: 8.3 - Show the current magnitude (0.0 to 1.0)
+            HStack {
+                Text("幅度:")
+                    .foregroundColor(.secondary)
+                Text(state.formattedMagnitude)
+                    .font(.system(.body, design: .monospaced))
+                
+                // Visual magnitude bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.gray.opacity(0.2))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.purple)
+                            .frame(width: geometry.size.width * CGFloat(min(1.0, state.magnitude)))
+                    }
+                }
+                .frame(height: 8)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.gray.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
 
 // MARK: - Data Models
 
@@ -481,12 +625,14 @@ struct DebugInputEvent: Identifiable {
     let inputName: String
     let value: String
     let isButton: Bool
+    let isDirection: Bool
     
     init(button: ButtonType, isPressed: Bool) {
         self.timestamp = Self.currentTimestamp()
         self.inputName = button.rawValue
         self.value = isPressed ? "按下" : "释放"
         self.isButton = true
+        self.isDirection = false
     }
     
     init(axis: AxisType, normalizedValue: Double) {
@@ -494,6 +640,17 @@ struct DebugInputEvent: Identifiable {
         self.inputName = axis.rawValue
         self.value = DebugPanelAxisFormatter.formatAxisValue(normalizedValue)
         self.isButton = false
+        self.isDirection = false
+    }
+    
+    /// Initialize with direction event
+    /// Requirements: 8.1, 8.4 - Display direction name and log direction events
+    init(direction: DirectionEvent) {
+        self.timestamp = Self.currentTimestamp()
+        self.inputName = "\(direction.stick.rawValue) \(direction.direction.rawValue)"
+        self.value = direction.state == .pressed ? "按下" : "释放"
+        self.isButton = false
+        self.isDirection = true
     }
     
     private static func currentTimestamp() -> String {
@@ -509,9 +666,11 @@ struct DebugActionEvent: Identifiable {
     let timestamp: String
     let actionType: String
     let details: String
+    let directionContext: String?
     
-    init(action: Action) {
+    init(action: Action, directionContext: String? = nil) {
         self.timestamp = Self.currentTimestamp()
+        self.directionContext = directionContext
         
         switch action {
         case .keyPress(let keyAction):
@@ -575,6 +734,33 @@ struct MacroState {
     var totalSteps: Int? = nil
 }
 
+/// Current stick direction state for display
+/// Requirements: 8.1, 8.2, 8.3 - Display direction name, angle, and magnitude
+struct StickDirectionState {
+    var activeDirection: StickDirection? = nil
+    var angle: Double = 0.0
+    var magnitude: Double = 0.0
+    
+    /// Formatted angle string
+    var formattedAngle: String {
+        DebugPanelAxisFormatter.formatAngle(angle)
+    }
+    
+    /// Formatted magnitude string
+    var formattedMagnitude: String {
+        DebugPanelAxisFormatter.formatMagnitude(magnitude)
+    }
+    
+    /// Formatted complete state string
+    var formattedState: String {
+        DebugPanelAxisFormatter.formatStickState(
+            direction: activeDirection?.rawValue,
+            angle: angle,
+            magnitude: magnitude
+        )
+    }
+}
+
 /// State for a single running macro instance
 /// Requirements: 1.6 - Display all running macro instances with their states
 struct RunningMacroInstanceState: Identifiable {
@@ -625,6 +811,18 @@ class DebugPanelViewModel: ObservableObject {
     /// All currently running macro instances
     /// Requirements: 1.6 - Display all running macro instances
     @Published var runningInstances: [RunningMacroInstanceState] = []
+    
+    /// Current direction state for left stick
+    /// Requirements: 8.1, 8.2, 8.3 - Display direction name, angle, and magnitude
+    @Published var leftStickDirectionState: StickDirectionState = StickDirectionState()
+    
+    /// Current direction state for right stick
+    /// Requirements: 8.1, 8.2, 8.3 - Display direction name, angle, and magnitude
+    @Published var rightStickDirectionState: StickDirectionState = StickDirectionState()
+    
+    /// Direction events log
+    /// Requirements: 8.4 - Log direction press/release events
+    @Published var directionEvents: [DebugInputEvent] = []
     
     // MARK: - Private Properties
     
@@ -744,6 +942,59 @@ class DebugPanelViewModel: ObservableObject {
         macroState.isRunning = !instances.isEmpty
     }
     
+    /// Record a direction event
+    /// Requirements: 8.1, 8.4 - Display direction name and log direction events
+    func recordDirectionEvent(_ event: DirectionEvent) {
+        // Update direction state
+        switch event.stick {
+        case .left:
+            if event.state == .pressed {
+                leftStickDirectionState.activeDirection = event.direction
+            } else if event.state == .released {
+                if leftStickDirectionState.activeDirection == event.direction {
+                    leftStickDirectionState.activeDirection = nil
+                }
+            }
+            leftStickDirectionState.angle = event.angle
+            leftStickDirectionState.magnitude = event.magnitude
+        case .right:
+            if event.state == .pressed {
+                rightStickDirectionState.activeDirection = event.direction
+            } else if event.state == .released {
+                if rightStickDirectionState.activeDirection == event.direction {
+                    rightStickDirectionState.activeDirection = nil
+                }
+            }
+            rightStickDirectionState.angle = event.angle
+            rightStickDirectionState.magnitude = event.magnitude
+        }
+        
+        // Log the direction event
+        let debugEvent = DebugInputEvent(direction: event)
+        addDirectionEvent(debugEvent)
+        addInputEvent(debugEvent)
+    }
+    
+    /// Update stick position without direction change
+    /// Requirements: 8.2, 8.3 - Display angle and magnitude
+    func updateStickPosition(stick: StickType, angle: Double, magnitude: Double) {
+        switch stick {
+        case .left:
+            leftStickDirectionState.angle = angle
+            leftStickDirectionState.magnitude = magnitude
+        case .right:
+            rightStickDirectionState.angle = angle
+            rightStickDirectionState.magnitude = magnitude
+        }
+    }
+    
+    /// Record a direction mapping action
+    /// Requirements: 8.4 - Log triggered actions for direction mappings
+    func recordDirectionAction(_ action: Action, direction: StickDirection, stick: StickType) {
+        let event = DebugActionEvent(action: action, directionContext: "\(stick.rawValue) \(direction.rawValue)")
+        addActionEvent(event)
+    }
+    
     // MARK: - Private Methods
     
     private func setupCallbacks() {
@@ -783,6 +1034,13 @@ class DebugPanelViewModel: ObservableObject {
         macroEvents.append(event)
         if macroEvents.count > maxEventCount {
             macroEvents.removeFirst()
+        }
+    }
+    
+    private func addDirectionEvent(_ event: DebugInputEvent) {
+        directionEvents.append(event)
+        if directionEvents.count > maxEventCount {
+            directionEvents.removeFirst()
         }
     }
 }

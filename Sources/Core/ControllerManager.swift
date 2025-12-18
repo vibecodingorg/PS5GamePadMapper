@@ -8,7 +8,7 @@ private enum DualSenseHID {
     static let productID_USB: Int32 = 0x0CE6  // DualSense USB
     static let productID_BT: Int32 = 0x0CE6   // DualSense Bluetooth (same product ID)
     
-    // HID Report structure offsets for USB mode
+    // HID Report structure offsets for USB mode (64 bytes)
     enum USBReport {
         static let reportID: Int = 0
         static let leftStickX: Int = 1
@@ -17,13 +17,13 @@ private enum DualSenseHID {
         static let rightStickY: Int = 4
         static let l2Trigger: Int = 5
         static let r2Trigger: Int = 6
-        static let buttons1: Int = 8   // Square, Cross, Circle, Triangle
+        static let buttons1: Int = 8   // D-pad + Square, Cross, Circle, Triangle
         static let buttons2: Int = 9   // L1, R1, L2, R2, Share, Options, L3, R3
         static let buttons3: Int = 10  // PS, Touchpad, Counter
         static let batteryLevel: Int = 53
     }
     
-    // HID Report structure offsets for Bluetooth mode
+    // HID Report structure offsets for Bluetooth full mode (78 bytes)
     enum BTReport {
         static let reportID: Int = 0
         static let leftStickX: Int = 2
@@ -36,6 +36,21 @@ private enum DualSenseHID {
         static let buttons2: Int = 10
         static let buttons3: Int = 11
         static let batteryLevel: Int = 54
+    }
+    
+    // HID Report structure offsets for Bluetooth simple mode (10 bytes)
+    // This is the default mode when connected via Bluetooth without special setup
+    enum BTSimpleReport {
+        static let reportID: Int = 0
+        static let leftStickX: Int = 1
+        static let leftStickY: Int = 2
+        static let rightStickX: Int = 3
+        static let rightStickY: Int = 4
+        static let buttons1: Int = 5   // D-pad + face buttons
+        static let buttons2: Int = 6   // Shoulder + options/share
+        static let buttons3: Int = 7   // L3/R3 + PS + touchpad
+        static let l2Trigger: Int = 8
+        static let r2Trigger: Int = 9
     }
 }
 
@@ -87,7 +102,6 @@ public final class ControllerManager: ControllerManagerProtocol {
     public var onControllerDisconnected: ((Controller) -> Void)?
     
     /// Callback for controller reconnection (for profile restoration)
-    /// Requirements: 1.6
     public var onControllerReconnected: ((Controller) -> Void)?
     
     /// Callback for button input events
@@ -98,7 +112,7 @@ public final class ControllerManager: ControllerManagerProtocol {
     
     private var hidManager: IOHIDManager?
     private var deviceStates: [String: DeviceState] = [:]
-    private var previouslyConnectedDevices: Set<String> = []  // Track devices for reconnection detection
+    private var previouslyConnectedDevices: Set<String> = []
     private let inputQueue = DispatchQueue(label: "com.ps5gamepadmapper.input", qos: .userInteractive)
     
     /// Tracks the state of a connected device
@@ -112,11 +126,9 @@ public final class ControllerManager: ControllerManagerProtocol {
         init(device: IOHIDDevice, controller: Controller) {
             self.device = device
             self.controller = controller
-            // Initialize all buttons as not pressed
             for button in ButtonType.allCases {
                 buttonStates[button] = false
             }
-            // Initialize all axes to neutral
             for axis in AxisType.allCases {
                 lastAxisValues[axis] = axis.isTrigger ? 0 : 128
             }
@@ -133,15 +145,21 @@ public final class ControllerManager: ControllerManagerProtocol {
     
     // MARK: - ControllerManagerProtocol
     
-    /// Start discovering DualSense controllers
-    /// Requirements: 1.1, 1.2
     public func startDiscovery() {
-        guard hidManager == nil else { return }
+        NSLog("[DEBUG] ControllerManager: 🔍 Starting HID discovery...")
+        guard hidManager == nil else {
+            NSLog("[DEBUG] ControllerManager: ⚠️ HID Manager already exists")
+            return
+        }
         
         hidManager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-        guard let manager = hidManager else { return }
+        guard let manager = hidManager else {
+            NSLog("[DEBUG] ControllerManager: ❌ Failed to create HID Manager")
+            return
+        }
         
-        // Set up matching criteria for Sony DualSense
+        NSLog("[DEBUG] ControllerManager: ✅ HID Manager created")
+        
         let matchingCriteria: [[String: Any]] = [
             [
                 kIOHIDVendorIDKey as String: DualSenseHID.vendorID,
@@ -149,72 +167,73 @@ public final class ControllerManager: ControllerManagerProtocol {
             ]
         ]
         
+        NSLog("[DEBUG] ControllerManager: 🎮 Looking for Sony DualSense (VendorID: 0x054C, ProductID: 0x0CE6)")
+        
         IOHIDManagerSetDeviceMatchingMultiple(manager, matchingCriteria as CFArray)
         
-        // Set up callbacks
         let context = Unmanaged.passUnretained(self).toOpaque()
         
-        IOHIDManagerRegisterDeviceMatchingCallback(manager, { context, result, sender, device in
+        IOHIDManagerRegisterDeviceMatchingCallback(manager, { context, _, _, device in
+            NSLog("[DEBUG] ControllerManager: 📱 Device matching callback triggered!")
             guard let context = context else { return }
             let manager = Unmanaged<ControllerManager>.fromOpaque(context).takeUnretainedValue()
             manager.handleDeviceConnected(device)
         }, context)
         
-        IOHIDManagerRegisterDeviceRemovalCallback(manager, { context, result, sender, device in
+        IOHIDManagerRegisterDeviceRemovalCallback(manager, { context, _, _, device in
+            NSLog("[DEBUG] ControllerManager: 📱 Device removal callback triggered!")
             guard let context = context else { return }
             let manager = Unmanaged<ControllerManager>.fromOpaque(context).takeUnretainedValue()
             manager.handleDeviceDisconnected(device)
         }, context)
         
-        IOHIDManagerRegisterInputReportCallback(manager, { context, result, sender, type, reportID, report, reportLength in
-            guard let context = context, let sender = sender else { return }
-            let manager = Unmanaged<ControllerManager>.fromOpaque(context).takeUnretainedValue()
-            // Cast sender from UnsafeMutableRawPointer to IOHIDDevice
-            let device = Unmanaged<IOHIDDevice>.fromOpaque(sender).takeUnretainedValue()
-            manager.handleInputReport(device: device, report: report, length: reportLength)
-        }, context)
-        
-        // Schedule on run loop
         IOHIDManagerScheduleWithRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+        NSLog("[DEBUG] ControllerManager: ✅ Scheduled on main run loop")
         
-        // Open the manager
         let result = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         if result != kIOReturnSuccess {
-            print("Failed to open HID Manager: \(result)")
+            NSLog("[DEBUG] ControllerManager: ❌ Failed to open HID Manager: \(result)")
+        } else {
+            NSLog("[DEBUG] ControllerManager: ✅ HID Manager opened successfully")
+        }
+        
+        if let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> {
+            NSLog("[DEBUG] ControllerManager: 📱 Found \(devices.count) already connected devices")
+            for device in devices {
+                handleDeviceConnected(device)
+            }
+        } else {
+            NSLog("[DEBUG] ControllerManager: 📱 No devices currently connected")
         }
     }
     
-    /// Stop discovering controllers
     public func stopDiscovery() {
         guard let manager = hidManager else { return }
         
         IOHIDManagerUnscheduleFromRunLoop(manager, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone))
         hidManager = nil
-        
-        // Clear all device states
         deviceStates.removeAll()
         connectedControllers.removeAll()
     }
 
-    
+
     // MARK: - Device Connection Handling
     
-    /// Handle device connection
-    /// Requirements: 1.1, 1.2, 1.3, 1.4, 1.6
     private func handleDeviceConnected(_ device: IOHIDDevice) {
         let deviceId = getDeviceId(device)
+        NSLog("[DEBUG] ControllerManager: 🎮 Device connected! ID: \(deviceId)")
         
-        // Check if this is a reconnection
+        if deviceStates[deviceId] != nil {
+            NSLog("[DEBUG] ControllerManager: ⚠️ Device already tracked, skipping")
+            return
+        }
+        
         let isReconnection = previouslyConnectedDevices.contains(deviceId)
-        
-        // Determine connection type
         let connectionType = determineConnectionType(device)
-        
-        // Get device name
         let name = getDeviceName(device) ?? "DualSense Controller"
+        NSLog("[DEBUG] ControllerManager: 🎮 Device name: \(name), connection: \(connectionType)")
         
-        // Read battery level if available
         let batteryLevel = readBatteryLevel(device)
         
         let controller = Controller(
@@ -224,29 +243,63 @@ public final class ControllerManager: ControllerManagerProtocol {
             batteryLevel: batteryLevel
         )
         
-        // Store device state
         let state = DeviceState(device: device, controller: controller)
         deviceStates[deviceId] = state
+        NSLog("[DEBUG] ControllerManager: ✅ Device state stored, total devices: \(deviceStates.count)")
         
-        // Track this device for future reconnection detection
+        registerDeviceInputCallback(device)
+        
         previouslyConnectedDevices.insert(deviceId)
-        
-        // Update connected controllers list
         connectedControllers.append(controller)
         
-        // Notify appropriate callback
         DispatchQueue.main.async { [weak self] in
             if isReconnection {
-                // Reconnection - trigger profile restoration
                 self?.onControllerReconnected?(controller)
             }
-            // Always call connected callback
             self?.onControllerConnected?(controller)
         }
     }
     
-    /// Handle device disconnection
-    /// Requirements: 1.5
+    private func registerDeviceInputCallback(_ device: IOHIDDevice) {
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        
+        let maxReportSize = IOHIDDeviceGetProperty(device, kIOHIDMaxInputReportSizeKey as CFString) as? Int ?? 128
+        NSLog("[DEBUG] ControllerManager: 📦 Max input report size: \(maxReportSize)")
+        
+        let reportBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: maxReportSize)
+        reportBuffer.initialize(repeating: 0, count: maxReportSize)
+        
+        IOHIDDeviceRegisterInputReportCallback(
+            device,
+            reportBuffer,
+            maxReportSize,
+            { context, _, sender, _, _, report, reportLength in
+                guard let context = context else { return }
+                let manager = Unmanaged<ControllerManager>.fromOpaque(context).takeUnretainedValue()
+                
+                guard let senderDevice = sender else { return }
+                let device = Unmanaged<IOHIDDevice>.fromOpaque(senderDevice).takeUnretainedValue()
+                
+                manager.handleInputReport(device: device, report: report, length: reportLength)
+            },
+            context
+        )
+        
+        IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+        
+        let openResult = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeSeizeDevice))
+        if openResult == kIOReturnSuccess {
+            NSLog("[DEBUG] ControllerManager: ✅ Device opened successfully with seize option")
+        } else {
+            let openResult2 = IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone))
+            if openResult2 == kIOReturnSuccess {
+                NSLog("[DEBUG] ControllerManager: ✅ Device opened successfully without seize option")
+            } else {
+                NSLog("[DEBUG] ControllerManager: ⚠️ Failed to open device: \(openResult2)")
+            }
+        }
+    }
+    
     private func handleDeviceDisconnected(_ device: IOHIDDevice) {
         let deviceId = getDeviceId(device)
         
@@ -254,29 +307,22 @@ public final class ControllerManager: ControllerManagerProtocol {
         
         let controller = state.controller
         
-        // Remove from tracking
         deviceStates.removeValue(forKey: deviceId)
         connectedControllers.removeAll { $0.deviceId == deviceId }
         
-        // Notify callback
         DispatchQueue.main.async { [weak self] in
             self?.onControllerDisconnected?(controller)
         }
     }
     
-    /// Determine if device is connected via USB or Bluetooth
-    /// Requirements: 1.3
     private func determineConnectionType(_ device: IOHIDDevice) -> ConnectionType {
-        // Check transport property
         if let transport = IOHIDDeviceGetProperty(device, kIOHIDTransportKey as CFString) as? String {
             if transport.lowercased().contains("bluetooth") {
                 return .bluetooth
             }
         }
         
-        // Check report descriptor size - Bluetooth reports are typically larger
         if let reportSize = IOHIDDeviceGetProperty(device, kIOHIDMaxInputReportSizeKey as CFString) as? Int {
-            // DualSense USB reports are typically 64 bytes, Bluetooth are 78 bytes
             if reportSize > 70 {
                 return .bluetooth
             }
@@ -285,7 +331,6 @@ public final class ControllerManager: ControllerManagerProtocol {
         return .usb
     }
     
-    /// Get unique device identifier
     private func getDeviceId(_ device: IOHIDDevice) -> String {
         let vendorId = IOHIDDeviceGetProperty(device, kIOHIDVendorIDKey as CFString) as? Int ?? 0
         let productId = IOHIDDeviceGetProperty(device, kIOHIDProductIDKey as CFString) as? Int ?? 0
@@ -294,118 +339,223 @@ public final class ControllerManager: ControllerManagerProtocol {
         return "\(vendorId)-\(productId)-\(locationId)"
     }
     
-    /// Get device name from HID properties
     private func getDeviceName(_ device: IOHIDDevice) -> String? {
         return IOHIDDeviceGetProperty(device, kIOHIDProductKey as CFString) as? String
     }
     
-    /// Read battery level from device
-    /// Requirements: 1.4
     private func readBatteryLevel(_ device: IOHIDDevice) -> Int? {
-        // Battery level is typically read from HID reports, not properties
-        // Return nil initially, will be updated from input reports
         return nil
     }
-    
+
+
     // MARK: - Input Report Handling
     
-    /// Handle HID input report
-    /// Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.3
+    private static var inputReportCount: Int = 0
+    
     private func handleInputReport(device: IOHIDDevice, report: UnsafePointer<UInt8>, length: CFIndex) {
         let deviceId = getDeviceId(device)
-        guard let state = deviceStates[deviceId] else { return }
+        guard let state = deviceStates[deviceId] else {
+            ControllerManager.inputReportCount += 1
+            if ControllerManager.inputReportCount % 500 == 1 {
+                NSLog("[DEBUG] ControllerManager: ⚠️ No device state for ID: \(deviceId)")
+            }
+            return
+        }
+        
+        ControllerManager.inputReportCount += 1
+        if ControllerManager.inputReportCount % 100 == 1 {
+            NSLog("[DEBUG] ControllerManager: 📦 Input report #\(ControllerManager.inputReportCount), length: \(length)")
+        }
         
         let timestamp = mach_absolute_time()
         let reportData = UnsafeBufferPointer(start: report, count: Int(length))
         
-        // Determine offsets based on connection type
-        let offsets: (
-            leftStickX: Int, leftStickY: Int,
-            rightStickX: Int, rightStickY: Int,
-            l2Trigger: Int, r2Trigger: Int,
-            buttons1: Int, buttons2: Int, buttons3: Int,
-            batteryLevel: Int
-        )
+        // Handle different report formats based on length
+        // 10 bytes: Bluetooth simple mode (most common for BT connection)
+        // 64 bytes: USB mode
+        // 78 bytes: Bluetooth full mode
         
-        if state.controller.connectionType == .bluetooth && length > 70 {
-            offsets = (
-                DualSenseHID.BTReport.leftStickX,
-                DualSenseHID.BTReport.leftStickY,
-                DualSenseHID.BTReport.rightStickX,
-                DualSenseHID.BTReport.rightStickY,
-                DualSenseHID.BTReport.l2Trigger,
-                DualSenseHID.BTReport.r2Trigger,
-                DualSenseHID.BTReport.buttons1,
-                DualSenseHID.BTReport.buttons2,
-                DualSenseHID.BTReport.buttons3,
-                DualSenseHID.BTReport.batteryLevel
-            )
-        } else {
-            offsets = (
-                DualSenseHID.USBReport.leftStickX,
-                DualSenseHID.USBReport.leftStickY,
-                DualSenseHID.USBReport.rightStickX,
-                DualSenseHID.USBReport.rightStickY,
-                DualSenseHID.USBReport.l2Trigger,
-                DualSenseHID.USBReport.r2Trigger,
-                DualSenseHID.USBReport.buttons1,
-                DualSenseHID.USBReport.buttons2,
-                DualSenseHID.USBReport.buttons3,
-                DualSenseHID.USBReport.batteryLevel
-            )
+        if length >= 10 && length < 64 {
+            // Bluetooth simple report format (10 bytes)
+            parseSimpleBluetoothReport(reportData: reportData, state: state, timestamp: timestamp)
+        } else if length >= 64 && length < 78 {
+            // USB report format (64 bytes)
+            parseUSBReport(reportData: reportData, state: state, timestamp: timestamp)
+        } else if length >= 78 {
+            // Bluetooth full report format (78 bytes)
+            parseBluetoothFullReport(reportData: reportData, state: state, timestamp: timestamp)
+        }
+    }
+    
+    /// Parse simple Bluetooth report format (10 bytes)
+    /// DualSense BT Simple Mode Layout:
+    /// Byte 0: Report ID (0x01)
+    /// Byte 1: Left stick X (0-255, center 128)
+    /// Byte 2: Left stick Y (0-255, center 128)
+    /// Byte 3: Right stick X (0-255, center 128)
+    /// Byte 4: Right stick Y (0-255, center 128)
+    /// Byte 5: D-pad (lower 4 bits: 0-7=directions, 8=neutral) + face buttons (upper 4 bits)
+    /// Byte 6: L1(0x01) R1(0x02) L2btn(0x04) R2btn(0x08) Share(0x10) Options(0x20) L3(0x40) R3(0x80)
+    /// Byte 7: PS(0x01) Touchpad(0x02) + Counter(bits 2-7)
+    /// Byte 8: L2 trigger analog (0-255)
+    /// Byte 9: R2 trigger analog (0-255)
+    private func parseSimpleBluetoothReport(reportData: UnsafeBufferPointer<UInt8>, state: DeviceState, timestamp: UInt64) {
+        guard reportData.count >= 10 else { return }
+        
+        // Debug: Print raw report data every 500 reports (reduced frequency)
+        if ControllerManager.inputReportCount % 500 == 1 {
+            let hexString = reportData.prefix(min(reportData.count, 10)).map { String(format: "%02X", $0) }.joined(separator: " ")
+            NSLog("[DEBUG] ControllerManager: 📦 Raw BT Simple report (len=\(reportData.count)): \(hexString)")
         }
         
-        // Ensure report is long enough
-        guard Int(length) > max(offsets.buttons3, offsets.batteryLevel) else { return }
+        // Sticks (bytes 1-4)
+        let leftStickXRaw = Int16(reportData[1]) - 128
+        let leftStickYRaw = Int16(reportData[2]) - 128
+        let rightStickXRaw = Int16(reportData[3]) - 128
+        let rightStickYRaw = Int16(reportData[4]) - 128
         
-        // Parse axis values
-        parseAxisInputs(reportData: reportData, offsets: offsets, state: state, timestamp: timestamp)
-        
-        // Parse button states
-        parseButtonInputs(reportData: reportData, offsets: offsets, state: state, timestamp: timestamp)
-        
-        // Update battery level if available
-        updateBatteryLevel(reportData: reportData, offset: offsets.batteryLevel, state: state)
-    }
-
-    
-    // MARK: - Axis Input Parsing
-    
-    /// Parse axis inputs from HID report
-    /// Requirements: 3.1, 3.3
-    private func parseAxisInputs(
-        reportData: UnsafeBufferPointer<UInt8>,
-        offsets: (leftStickX: Int, leftStickY: Int, rightStickX: Int, rightStickY: Int,
-                  l2Trigger: Int, r2Trigger: Int, buttons1: Int, buttons2: Int, buttons3: Int, batteryLevel: Int),
-        state: DeviceState,
-        timestamp: UInt64
-    ) {
-        // Left stick X (0-255, center at 128)
-        let leftStickXRaw = Int16(reportData[offsets.leftStickX]) - 128
         emitAxisIfChanged(axis: .leftStickX, rawValue: leftStickXRaw, state: state, timestamp: timestamp)
-        
-        // Left stick Y (0-255, center at 128, inverted)
-        let leftStickYRaw = Int16(reportData[offsets.leftStickY]) - 128
         emitAxisIfChanged(axis: .leftStickY, rawValue: leftStickYRaw, state: state, timestamp: timestamp)
-        
-        // Right stick X (0-255, center at 128)
-        let rightStickXRaw = Int16(reportData[offsets.rightStickX]) - 128
         emitAxisIfChanged(axis: .rightStickX, rawValue: rightStickXRaw, state: state, timestamp: timestamp)
-        
-        // Right stick Y (0-255, center at 128, inverted)
-        let rightStickYRaw = Int16(reportData[offsets.rightStickY]) - 128
         emitAxisIfChanged(axis: .rightStickY, rawValue: rightStickYRaw, state: state, timestamp: timestamp)
         
-        // L2 trigger (0-255)
-        let l2Raw = Int16(reportData[offsets.l2Trigger])
+        // Triggers (bytes 8-9)
+        let l2Raw = Int16(reportData[8])
+        let r2Raw = Int16(reportData[9])
         emitAxisIfChanged(axis: .l2Trigger, rawValue: l2Raw, state: state, timestamp: timestamp)
-        
-        // R2 trigger (0-255)
-        let r2Raw = Int16(reportData[offsets.r2Trigger])
         emitAxisIfChanged(axis: .r2Trigger, rawValue: r2Raw, state: state, timestamp: timestamp)
+        
+        // Buttons
+        let buttons1 = reportData[5]  // D-pad + face buttons
+        let buttons2 = reportData[6]  // Shoulder + L3/R3 + Share/Options
+        let buttons3 = reportData[7] & 0x03  // Only lower 2 bits: PS + Touchpad (upper bits are counter)
+        
+        parseButtonsSimpleBT(buttons1: buttons1, buttons2: buttons2, buttons3: buttons3, state: state, timestamp: timestamp)
     }
     
-    /// Emit axis input if value changed
+    /// Parse buttons for simple Bluetooth mode (different bit layout than USB/full BT)
+    private func parseButtonsSimpleBT(buttons1: UInt8, buttons2: UInt8, buttons3: UInt8, state: DeviceState, timestamp: UInt64) {
+        // D-pad (lower 4 bits of buttons1)
+        let dpadValue = buttons1 & 0x0F
+        parseDPad(dpadValue: dpadValue, state: state, timestamp: timestamp)
+        
+        // Face buttons (upper 4 bits of buttons1)
+        emitButtonIfChanged(button: .square, isPressed: (buttons1 & 0x10) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .cross, isPressed: (buttons1 & 0x20) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .circle, isPressed: (buttons1 & 0x40) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .triangle, isPressed: (buttons1 & 0x80) != 0, state: state, timestamp: timestamp)
+        
+        // Shoulder buttons and others (buttons2)
+        emitButtonIfChanged(button: .l1, isPressed: (buttons2 & 0x01) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r1, isPressed: (buttons2 & 0x02) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .l2, isPressed: (buttons2 & 0x04) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r2, isPressed: (buttons2 & 0x08) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .share, isPressed: (buttons2 & 0x10) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .options, isPressed: (buttons2 & 0x20) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .l3, isPressed: (buttons2 & 0x40) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r3, isPressed: (buttons2 & 0x80) != 0, state: state, timestamp: timestamp)
+        
+        // PS and touchpad (buttons3 - already masked to lower 2 bits)
+        emitButtonIfChanged(button: .ps, isPressed: (buttons3 & 0x01) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .touchpad, isPressed: (buttons3 & 0x02) != 0, state: state, timestamp: timestamp)
+    }
+    
+    /// Parse USB report format (64 bytes)
+    private func parseUSBReport(reportData: UnsafeBufferPointer<UInt8>, state: DeviceState, timestamp: UInt64) {
+        guard reportData.count >= 11 else { return }
+        
+        let leftStickXRaw = Int16(reportData[DualSenseHID.USBReport.leftStickX]) - 128
+        let leftStickYRaw = Int16(reportData[DualSenseHID.USBReport.leftStickY]) - 128
+        let rightStickXRaw = Int16(reportData[DualSenseHID.USBReport.rightStickX]) - 128
+        let rightStickYRaw = Int16(reportData[DualSenseHID.USBReport.rightStickY]) - 128
+        
+        emitAxisIfChanged(axis: .leftStickX, rawValue: leftStickXRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .leftStickY, rawValue: leftStickYRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .rightStickX, rawValue: rightStickXRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .rightStickY, rawValue: rightStickYRaw, state: state, timestamp: timestamp)
+        
+        let l2Raw = Int16(reportData[DualSenseHID.USBReport.l2Trigger])
+        let r2Raw = Int16(reportData[DualSenseHID.USBReport.r2Trigger])
+        emitAxisIfChanged(axis: .l2Trigger, rawValue: l2Raw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .r2Trigger, rawValue: r2Raw, state: state, timestamp: timestamp)
+        
+        let buttons1 = reportData[DualSenseHID.USBReport.buttons1]
+        let buttons2 = reportData[DualSenseHID.USBReport.buttons2]
+        let buttons3 = reportData[DualSenseHID.USBReport.buttons3]
+        
+        parseButtons(buttons1: buttons1, buttons2: buttons2, buttons3: buttons3, state: state, timestamp: timestamp)
+    }
+    
+    /// Parse Bluetooth full report format (78 bytes)
+    private func parseBluetoothFullReport(reportData: UnsafeBufferPointer<UInt8>, state: DeviceState, timestamp: UInt64) {
+        guard reportData.count >= 12 else { return }
+        
+        let leftStickXRaw = Int16(reportData[DualSenseHID.BTReport.leftStickX]) - 128
+        let leftStickYRaw = Int16(reportData[DualSenseHID.BTReport.leftStickY]) - 128
+        let rightStickXRaw = Int16(reportData[DualSenseHID.BTReport.rightStickX]) - 128
+        let rightStickYRaw = Int16(reportData[DualSenseHID.BTReport.rightStickY]) - 128
+        
+        emitAxisIfChanged(axis: .leftStickX, rawValue: leftStickXRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .leftStickY, rawValue: leftStickYRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .rightStickX, rawValue: rightStickXRaw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .rightStickY, rawValue: rightStickYRaw, state: state, timestamp: timestamp)
+        
+        let l2Raw = Int16(reportData[DualSenseHID.BTReport.l2Trigger])
+        let r2Raw = Int16(reportData[DualSenseHID.BTReport.r2Trigger])
+        emitAxisIfChanged(axis: .l2Trigger, rawValue: l2Raw, state: state, timestamp: timestamp)
+        emitAxisIfChanged(axis: .r2Trigger, rawValue: r2Raw, state: state, timestamp: timestamp)
+        
+        let buttons1 = reportData[DualSenseHID.BTReport.buttons1]
+        let buttons2 = reportData[DualSenseHID.BTReport.buttons2]
+        let buttons3 = reportData[DualSenseHID.BTReport.buttons3]
+        
+        parseButtons(buttons1: buttons1, buttons2: buttons2, buttons3: buttons3, state: state, timestamp: timestamp)
+    }
+    
+    /// Parse button bytes (common for all report formats)
+    private func parseButtons(buttons1: UInt8, buttons2: UInt8, buttons3: UInt8, state: DeviceState, timestamp: UInt64) {
+        // D-pad (lower 4 bits of buttons1)
+        let dpadValue = buttons1 & ButtonMask.dpadMask
+        parseDPad(dpadValue: dpadValue, state: state, timestamp: timestamp)
+        
+        // Face buttons (upper 4 bits of buttons1)
+        emitButtonIfChanged(button: .square, isPressed: (buttons1 & ButtonMask.square) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .cross, isPressed: (buttons1 & ButtonMask.cross) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .circle, isPressed: (buttons1 & ButtonMask.circle) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .triangle, isPressed: (buttons1 & ButtonMask.triangle) != 0, state: state, timestamp: timestamp)
+        
+        // Shoulder buttons (buttons2)
+        emitButtonIfChanged(button: .l1, isPressed: (buttons2 & ButtonMask.l1) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r1, isPressed: (buttons2 & ButtonMask.r1) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .l2, isPressed: (buttons2 & ButtonMask.l2) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r2, isPressed: (buttons2 & ButtonMask.r2) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .share, isPressed: (buttons2 & ButtonMask.share) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .options, isPressed: (buttons2 & ButtonMask.options) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .l3, isPressed: (buttons2 & ButtonMask.l3) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .r3, isPressed: (buttons2 & ButtonMask.r3) != 0, state: state, timestamp: timestamp)
+        
+        // PS and touchpad (buttons3)
+        emitButtonIfChanged(button: .ps, isPressed: (buttons3 & ButtonMask.ps) != 0, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .touchpad, isPressed: (buttons3 & ButtonMask.touchpad) != 0, state: state, timestamp: timestamp)
+    }
+    
+    private func parseDPad(dpadValue: UInt8, state: DeviceState, timestamp: UInt64) {
+        let direction = DPadDirection(rawValue: dpadValue) ?? .neutral
+        
+        let upPressed = direction == .up || direction == .upLeft || direction == .upRight
+        let downPressed = direction == .down || direction == .downLeft || direction == .downRight
+        let leftPressed = direction == .left || direction == .upLeft || direction == .downLeft
+        let rightPressed = direction == .right || direction == .upRight || direction == .downRight
+        
+        emitButtonIfChanged(button: .dpadUp, isPressed: upPressed, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .dpadDown, isPressed: downPressed, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .dpadLeft, isPressed: leftPressed, state: state, timestamp: timestamp)
+        emitButtonIfChanged(button: .dpadRight, isPressed: rightPressed, state: state, timestamp: timestamp)
+    }
+
+
+    // MARK: - Event Emission
+    
     private func emitAxisIfChanged(axis: AxisType, rawValue: Int16, state: DeviceState, timestamp: UInt64) {
         let lastValue = state.lastAxisValues[axis] ?? (axis.isTrigger ? 0 : 128)
         
@@ -421,78 +571,26 @@ public final class ControllerManager: ControllerManagerProtocol {
         }
     }
     
-    // MARK: - Button Input Parsing
-    
-    /// Parse button inputs from HID report
-    /// Requirements: 2.1, 2.2, 2.3, 2.4
-    private func parseButtonInputs(
-        reportData: UnsafeBufferPointer<UInt8>,
-        offsets: (leftStickX: Int, leftStickY: Int, rightStickX: Int, rightStickY: Int,
-                  l2Trigger: Int, r2Trigger: Int, buttons1: Int, buttons2: Int, buttons3: Int, batteryLevel: Int),
-        state: DeviceState,
-        timestamp: UInt64
-    ) {
-        let buttons1 = reportData[offsets.buttons1]
-        let buttons2 = reportData[offsets.buttons2]
-        let buttons3 = reportData[offsets.buttons3]
-        
-        // Parse D-pad (lower 4 bits of buttons1)
-        let dpadValue = buttons1 & ButtonMask.dpadMask
-        parseDPad(dpadValue: dpadValue, state: state, timestamp: timestamp)
-        
-        // Parse face buttons (upper 4 bits of buttons1)
-        emitButtonIfChanged(button: .square, isPressed: (buttons1 & ButtonMask.square) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .cross, isPressed: (buttons1 & ButtonMask.cross) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .circle, isPressed: (buttons1 & ButtonMask.circle) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .triangle, isPressed: (buttons1 & ButtonMask.triangle) != 0, state: state, timestamp: timestamp)
-        
-        // Parse shoulder and stick buttons (buttons2)
-        emitButtonIfChanged(button: .l1, isPressed: (buttons2 & ButtonMask.l1) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .r1, isPressed: (buttons2 & ButtonMask.r1) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .l2, isPressed: (buttons2 & ButtonMask.l2) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .r2, isPressed: (buttons2 & ButtonMask.r2) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .share, isPressed: (buttons2 & ButtonMask.share) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .options, isPressed: (buttons2 & ButtonMask.options) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .l3, isPressed: (buttons2 & ButtonMask.l3) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .r3, isPressed: (buttons2 & ButtonMask.r3) != 0, state: state, timestamp: timestamp)
-        
-        // Parse PS and touchpad buttons (buttons3)
-        emitButtonIfChanged(button: .ps, isPressed: (buttons3 & ButtonMask.ps) != 0, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .touchpad, isPressed: (buttons3 & ButtonMask.touchpad) != 0, state: state, timestamp: timestamp)
-    }
-    
-    /// Parse D-pad direction
-    private func parseDPad(dpadValue: UInt8, state: DeviceState, timestamp: UInt64) {
-        let direction = DPadDirection(rawValue: dpadValue) ?? .neutral
-        
-        let upPressed = direction == .up || direction == .upLeft || direction == .upRight
-        let downPressed = direction == .down || direction == .downLeft || direction == .downRight
-        let leftPressed = direction == .left || direction == .upLeft || direction == .downLeft
-        let rightPressed = direction == .right || direction == .upRight || direction == .downRight
-        
-        emitButtonIfChanged(button: .dpadUp, isPressed: upPressed, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .dpadDown, isPressed: downPressed, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .dpadLeft, isPressed: leftPressed, state: state, timestamp: timestamp)
-        emitButtonIfChanged(button: .dpadRight, isPressed: rightPressed, state: state, timestamp: timestamp)
-    }
-    
-    /// Emit button input if state changed
-    /// Requirements: 2.1, 2.2, 2.3
     private func emitButtonIfChanged(button: ButtonType, isPressed: Bool, state: DeviceState, timestamp: UInt64) {
         let wasPressed = state.buttonStates[button] ?? false
         
         if isPressed != wasPressed {
             state.buttonStates[button] = isPressed
+            NSLog("[DEBUG] ControllerManager: 🎮 Button \(button.rawValue) changed: \(isPressed ? "PRESSED" : "RELEASED")")
             
             if isPressed {
-                // Record press timestamp for hold duration tracking
                 state.buttonPressTimestamps[button] = timestamp
             } else {
-                // Clear press timestamp on release
                 state.buttonPressTimestamps.removeValue(forKey: button)
             }
             
             let input = RawButtonInput(button: button, isPressed: isPressed, timestamp: timestamp)
+            
+            if self.onButtonInput != nil {
+                NSLog("[DEBUG] ControllerManager: ✅ onButtonInput callback is set, dispatching...")
+            } else {
+                NSLog("[DEBUG] ControllerManager: ⚠️ onButtonInput callback is NOT set!")
+            }
             
             inputQueue.async { [weak self] in
                 self?.onButtonInput?(input)
@@ -500,46 +598,14 @@ public final class ControllerManager: ControllerManagerProtocol {
         }
     }
     
-    // MARK: - Battery Level
-    
-    /// Update battery level from HID report
-    /// Requirements: 1.4
-    private func updateBatteryLevel(reportData: UnsafeBufferPointer<UInt8>, offset: Int, state: DeviceState) {
-        guard offset < reportData.count else { return }
-        
-        let batteryByte = reportData[offset]
-        // Battery level is in lower 4 bits, multiply by 10 to get percentage (0-100)
-        let batteryLevel = Int(batteryByte & 0x0F) * 10
-        
-        // Only update if changed
-        if state.controller.batteryLevel != batteryLevel {
-            let updatedController = Controller(
-                deviceId: state.controller.deviceId,
-                name: state.controller.name,
-                connectionType: state.controller.connectionType,
-                batteryLevel: batteryLevel
-            )
-            state.controller = updatedController
-            
-            // Update in connected controllers list
-            if let index = connectedControllers.firstIndex(where: { $0.deviceId == state.controller.deviceId }) {
-                connectedControllers[index] = updatedController
-            }
-        }
-    }
-    
     // MARK: - Public Utilities
     
-    /// Get current button state for a specific button
-    /// Requirements: 2.3
     public func isButtonPressed(_ button: ButtonType, controllerId: String? = nil) -> Bool {
         let targetId = controllerId ?? connectedControllers.first?.deviceId
         guard let id = targetId, let state = deviceStates[id] else { return false }
         return state.buttonStates[button] ?? false
     }
     
-    /// Get hold duration for a button
-    /// Requirements: 2.3
     public func getButtonHoldDuration(_ button: ButtonType, controllerId: String? = nil) -> TimeInterval? {
         let targetId = controllerId ?? connectedControllers.first?.deviceId
         guard let id = targetId, let state = deviceStates[id] else { return nil }
@@ -554,16 +620,13 @@ public final class ControllerManager: ControllerManagerProtocol {
         return TimeInterval(elapsedNanos) / 1_000_000_000.0
     }
     
-    /// Get current axis value
     public func getAxisValue(_ axis: AxisType, controllerId: String? = nil) -> Int16? {
         let targetId = controllerId ?? connectedControllers.first?.deviceId
         guard let id = targetId, let state = deviceStates[id] else { return nil }
         return state.lastAxisValues[axis]
     }
     
-    /// Refresh controller information (e.g., battery level)
     public func refreshController(_ controllerId: String) {
         // Battery level is updated automatically from HID reports
-        // This method can be used for manual refresh if needed
     }
 }

@@ -28,6 +28,8 @@ public final class EventEmitter: EventEmitterProtocol {
     /// Requirements: 4.1 - Emit keyboard key press event within 20ms
     /// Requirements: 4.4 - Emit all modifier keys before the primary key
     public func emitKeyDown(_ keyCode: UInt16, modifiers: KeyModifiers) {
+        print("[DEBUG] EventEmitter: ⌨️ emitKeyDown - keyCode: \(keyCode), modifiers: \(modifiers)")
+        
         // First, emit modifier keys in order (Cmd, Ctrl, Alt, Shift)
         let orderedMods = modifiers.orderedModifiers
         for modifier in orderedMods {
@@ -39,6 +41,7 @@ public final class EventEmitter: EventEmitterProtocol {
         
         // Then emit the primary key
         emitKeyEvent(keyCode: keyCode, keyDown: true, modifiers: modifiers)
+        print("[DEBUG] EventEmitter: ✅ Key down event posted")
         
         if recordEvents {
             emittedEvents.append(.keyDown(keyCode: keyCode, modifiers: modifiers))
@@ -48,8 +51,11 @@ public final class EventEmitter: EventEmitterProtocol {
     /// Emit a key up event with modifiers
     /// Requirements: 4.2 - Emit keyboard key release event within 20ms
     public func emitKeyUp(_ keyCode: UInt16, modifiers: KeyModifiers) {
+        print("[DEBUG] EventEmitter: ⌨️ emitKeyUp - keyCode: \(keyCode), modifiers: \(modifiers)")
+        
         // First release the primary key
         emitKeyEvent(keyCode: keyCode, keyDown: false, modifiers: modifiers)
+        print("[DEBUG] EventEmitter: ✅ Key up event posted")
         
         if recordEvents {
             emittedEvents.append(.keyUp(keyCode: keyCode, modifiers: modifiers))

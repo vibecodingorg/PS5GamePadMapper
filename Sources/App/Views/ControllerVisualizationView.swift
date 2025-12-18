@@ -3,6 +3,7 @@ import PS5GamePadMapperCore
 
 /// Interactive controller visualization showing all mappable inputs
 /// Requirements: 18.2, 18.3 - Display controller visualization with clickable inputs
+/// Requirements: 3.1, 3.4 - Support direction selector for sticks
 struct ControllerVisualizationView: View {
     @Binding var selectedInput: InputSource?
     let onInputSelected: (InputSource) -> Void
@@ -10,6 +11,10 @@ struct ControllerVisualizationView: View {
     // Track which inputs are currently pressed (for visual feedback)
     var pressedButtons: Set<ButtonType> = []
     var axisValues: [AxisType: Double] = [:]
+    
+    // Direction mapping support
+    var configuredDirections: [StickType: Set<StickDirection>] = [:]
+    var onStickDirectionTapped: ((StickType) -> Void)?
     
     var body: some View {
         GeometryReader { geometry in
@@ -28,24 +33,30 @@ struct ControllerVisualizationView: View {
                 // Left stick
                 StickView(
                     label: "L",
+                    stickType: .left,
                     axisX: .leftStickX,
                     axisY: .leftStickY,
                     selectedInput: $selectedInput,
                     onInputSelected: onInputSelected,
+                    onDirectionTapped: onStickDirectionTapped,
                     valueX: axisValues[.leftStickX] ?? 0,
-                    valueY: axisValues[.leftStickY] ?? 0
+                    valueY: axisValues[.leftStickY] ?? 0,
+                    hasDirectionMappings: !(configuredDirections[.left]?.isEmpty ?? true)
                 )
                 .position(x: width * 0.25, y: height * 0.45)
                 
                 // Right stick
                 StickView(
                     label: "R",
+                    stickType: .right,
                     axisX: .rightStickX,
                     axisY: .rightStickY,
                     selectedInput: $selectedInput,
                     onInputSelected: onInputSelected,
+                    onDirectionTapped: onStickDirectionTapped,
                     valueX: axisValues[.rightStickX] ?? 0,
-                    valueY: axisValues[.rightStickY] ?? 0
+                    valueY: axisValues[.rightStickY] ?? 0,
+                    hasDirectionMappings: !(configuredDirections[.right]?.isEmpty ?? true)
                 )
                 .position(x: width * 0.75, y: height * 0.65)
                 
@@ -150,19 +161,26 @@ struct ControllerBodyShape: Shape {
     }
 }
 
-/// Analog stick visualization
+/// Analog stick visualization with direction mapping support
+/// Requirements: 3.1, 3.4 - Tap gesture to open direction selector for sticks
 struct StickView: View {
     let label: String
+    let stickType: StickType
     let axisX: AxisType
     let axisY: AxisType
     @Binding var selectedInput: InputSource?
     let onInputSelected: (InputSource) -> Void
+    var onDirectionTapped: ((StickType) -> Void)?
     let valueX: Double
     let valueY: Double
+    var hasDirectionMappings: Bool = false
     
     private var isSelected: Bool {
         if case .axis(let type) = selectedInput {
             return type == axisX || type == axisY
+        }
+        if case .direction(let dirInput) = selectedInput {
+            return dirInput.stick == stickType
         }
         return false
     }
@@ -173,6 +191,13 @@ struct StickView: View {
             Circle()
                 .fill(Color.gray.opacity(0.3))
                 .frame(width: 70, height: 70)
+            
+            // Direction indicator ring (shows if direction mappings exist)
+            if hasDirectionMappings {
+                Circle()
+                    .stroke(Color.green.opacity(0.5), lineWidth: 3)
+                    .frame(width: 70, height: 70)
+            }
             
             // Stick position indicator
             Circle()
@@ -185,15 +210,38 @@ struct StickView: View {
                 .font(.caption2)
                 .foregroundColor(.white)
                 .offset(x: valueX * 12, y: valueY * 12)
+            
+            // Direction mode indicator
+            if hasDirectionMappings {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 8))
+                    .foregroundColor(.green)
+                    .offset(x: 25, y: -25)
+            }
         }
         .onTapGesture {
+            // Single tap selects axis for axis mapping
             selectedInput = .axis(axisX)
             onInputSelected(.axis(axisX))
+        }
+        .onTapGesture(count: 2) {
+            // Double tap opens direction selector
+            onDirectionTapped?(stickType)
+        }
+        .contextMenu {
+            Button("轴映射") {
+                selectedInput = .axis(axisX)
+                onInputSelected(.axis(axisX))
+            }
+            Button("方向映射") {
+                onDirectionTapped?(stickType)
+            }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 35)
                 .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
         )
+        .help("单击: 轴映射 | 双击/右键: 方向映射")
     }
 }
 
@@ -479,7 +527,9 @@ struct CenterButton: View {
         selectedInput: .constant(.button(.cross)),
         onInputSelected: { _ in },
         pressedButtons: [.cross, .l1],
-        axisValues: [.leftStickX: 0.5, .leftStickY: -0.3, .l2Trigger: 0.7]
+        axisValues: [.leftStickX: 0.5, .leftStickY: -0.3, .l2Trigger: 0.7],
+        configuredDirections: [.left: [.up, .down, .left, .right]],
+        onStickDirectionTapped: { _ in }
     )
     .frame(width: 600, height: 400)
     .padding()

@@ -21,6 +21,7 @@ public struct AxisToKeyConfig: Codable, Equatable {
 
 /// Core mapping engine that converts controller inputs to actions
 /// Requirements: 4.5, 5.2, 5.3, 5.4, 7.1, 7.2, 7.3, 7.4
+/// Requirements: 2.2, 4.4, 5.3, 5.4, 7.3 - Direction mapping support
 public final class MappingEngine: MappingEngineProtocol {
     
     // MARK: - Properties
@@ -38,6 +39,14 @@ public final class MappingEngine: MappingEngineProtocol {
     
     /// Axis-to-key configurations
     private var axisToKeyConfigs: [AxisType: AxisToKeyConfig] = [:]
+    
+    /// Track direction key states for direction-to-key mapping
+    /// Requirements: 2.4 - Track direction states for release events
+    private var directionKeyStates: [StickType: [StickDirection: Bool]] = [:]
+    
+    /// Track which sticks have direction mappings configured
+    /// Requirements: 7.3 - Direction mappings take priority over axis
+    private var sticksWithDirectionMappings: Set<StickType> = []
     
     // MARK: - Initialization
     
@@ -69,7 +78,10 @@ public final class MappingEngine: MappingEngineProtocol {
     /// Requirements: 4.5 - Support Press, Release, and Hold trigger types
     /// Requirements: 5.2, 5.3, 5.4 - Mouse button and scroll mapping
     public func handleButtonEvent(_ event: ButtonEvent) -> [Action] {
-        guard let profile = activeProfile else { return [] }
+        guard let profile = activeProfile else {
+            print("[DEBUG] MappingEngine: No active profile")
+            return []
+        }
         
         var actions: [Action] = []
         
@@ -81,9 +93,15 @@ public final class MappingEngine: MappingEngineProtocol {
             return false
         }
         
+        print("[DEBUG] MappingEngine: Found \(buttonMappings.count) mappings for button \(event.button.rawValue)")
+        
         for mapping in buttonMappings {
+            print("[DEBUG] MappingEngine: Checking mapping - trigger: \(mapping.trigger), action: \(mapping.action)")
             if evaluateTrigger(mapping.trigger, for: event, button: event.button) != nil {
+                print("[DEBUG] MappingEngine: ✅ Trigger matched! Adding action: \(mapping.action)")
                 actions.append(mapping.action)
+            } else {
+                print("[DEBUG] MappingEngine: ❌ Trigger not matched for event state: \(event.state)")
             }
         }
         
@@ -92,8 +110,16 @@ public final class MappingEngine: MappingEngineProtocol {
     
     /// Handle an axis event and return resulting actions
     /// Requirements: 7.1, 7.2, 7.3 - Axis-to-key threshold behavior
+    /// Requirements: 7.3 - Direction mappings take priority over axis
     public func handleAxisEvent(_ event: AxisEvent) -> [Action] {
         guard let profile = activeProfile else { return [] }
+        
+        // Requirements: 7.3 - Check if this axis belongs to a stick with direction mappings
+        // If so, skip axis processing to let direction mappings take priority
+        let stickType = stickTypeForAxis(event.axis)
+        if let stick = stickType, hasDirectionMappings(for: stick) {
+            return []
+        }
         
         var actions: [Action] = []
         
@@ -117,6 +143,153 @@ public final class MappingEngine: MappingEngineProtocol {
         }
         
         return actions
+    }
+    
+    // MARK: - Direction Handling
+    
+    /// Handle a direction event and return resulting actions
+    /// Requirements: 2.2, 5.2 - Find direction mappings and execute actions
+    /// Requirements: 4.4, 5.3 - Diagonal fallback to adjacent cardinals
+    /// Requirements: 5.4 - Diagonal priority over cardinals
+    public func handleDirectionEvent(_ event: DirectionEvent) -> [Action] {
+        guard let profile = activeProfile else { return [] }
+        
+        var actions: [Action] = []
+        
+        // Find direct mapping for this direction
+        let directMapping = findDirectionMapping(stick: event.stick, direction: event.direction, in: profile)
+        
+        if event.direction.isDiagonal {
+            // Requirements: 5.4 - When diagonal has mapping, trigger only diagonal
+            if let mapping = directMapping {
+                if let action = processDirectionMapping(mapping, state: event.state, stick: event.stick, direction: event.direction) {
+                    actions.append(action)
+                }
+            } else {
+                // Requirements: 4.4, 5.3 - When diagonal has no mapping, trigger adjacent cardinals
+                let fallbackActions = handleDiagonalFallback(
+                    stick: event.stick,
+                    direction: event.direction,
+                    state: event.state,
+                    profile: profile
+                )
+                actions.append(contentsOf: fallbackActions)
+            }
+        } else {
+            // Cardinal direction - process directly
+            if let mapping = directMapping {
+                if let action = processDirectionMapping(mapping, state: event.state, stick: event.stick, direction: event.direction) {
+                    actions.append(action)
+                }
+            }
+        }
+        
+        return actions
+    }
+    
+    /// Find a direction mapping for a specific stick and direction
+    /// Requirements: 2.2 - Find direction mappings
+    public func findDirectionMapping(stick: StickType, direction: StickDirection, in profile: Profile) -> Mapping? {
+        return profile.mappings.first { mapping in
+            if case .direction(let dirInput) = mapping.input {
+                return dirInput.stick == stick && dirInput.direction == direction
+            }
+            return false
+        }
+    }
+    
+    /// Handle diagonal fallback to adjacent cardinal directions
+    /// Requirements: 4.4, 5.3 - When diagonal has no mapping, trigger both adjacent cardinals
+    public func handleDiagonalFallback(stick: StickType, direction: StickDirection, state: DirectionState, profile: Profile) -> [Action] {
+        guard direction.isDiagonal else { return [] }
+        
+        var actions: [Action] = []
+        
+        // Get adjacent cardinal directions
+        let adjacentCardinals = direction.adjacentCardinals
+        
+        for cardinal in adjacentCardinals {
+            if let mapping = findDirectionMapping(stick: stick, direction: cardinal, in: profile) {
+                if let action = processDirectionMapping(mapping, state: state, stick: stick, direction: cardinal) {
+                    actions.append(action)
+                }
+            }
+        }
+        
+        return actions
+    }
+    
+    /// Process a direction mapping based on state
+    /// Requirements: 2.2 - Execute corresponding actions
+    private func processDirectionMapping(_ mapping: Mapping, state: DirectionState, stick: StickType, direction: StickDirection) -> Action? {
+        // Initialize direction state tracking if needed
+        if directionKeyStates[stick] == nil {
+            directionKeyStates[stick] = [:]
+        }
+        
+        let wasPressed = directionKeyStates[stick]?[direction] ?? false
+        
+        switch state {
+        case .pressed:
+            if !wasPressed {
+                directionKeyStates[stick]?[direction] = true
+                // Return press action based on trigger mode
+                if case .press = mapping.trigger {
+                    return mapping.action
+                } else if case .toggle = mapping.trigger {
+                    return mapping.action
+                }
+            }
+            
+        case .released:
+            if wasPressed {
+                directionKeyStates[stick]?[direction] = false
+                // Return release action based on trigger mode
+                if case .release = mapping.trigger {
+                    return mapping.action
+                }
+                // For key press actions, emit key release
+                if case .press = mapping.trigger {
+                    if case .keyPress(let keyAction) = mapping.action {
+                        return .keyRelease(keyAction)
+                    }
+                }
+            }
+            
+        case .held:
+            // For hold trigger mode, check if threshold is met
+            if case .hold = mapping.trigger {
+                return mapping.action
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Check if a stick has any direction mappings configured
+    /// Requirements: 7.3 - Direction mappings take priority over axis
+    public func hasDirectionMappings(for stick: StickType) -> Bool {
+        guard let profile = activeProfile else { return false }
+        
+        return profile.mappings.contains { mapping in
+            if case .direction(let dirInput) = mapping.input {
+                return dirInput.stick == stick
+            }
+            return false
+        }
+    }
+    
+    /// Get the stick type for an axis, if applicable
+    /// Requirements: 7.3 - Map axis to stick for priority checking
+    private func stickTypeForAxis(_ axis: AxisType) -> StickType? {
+        switch axis {
+        case .leftStickX, .leftStickY:
+            return .left
+        case .rightStickX, .rightStickY:
+            return .right
+        case .l2Trigger, .r2Trigger:
+            return nil
+        }
     }
     
     // MARK: - Private Methods
@@ -225,6 +398,17 @@ public final class MappingEngine: MappingEngineProtocol {
     /// Get the current axis key state for an axis
     public func getAxisKeyState(for axis: AxisType) -> AxisKeyState {
         return axisKeyStates[axis] ?? AxisKeyState()
+    }
+    
+    /// Reset all direction states
+    /// Requirements: 2.4 - Reset direction tracking
+    public func resetDirectionStates() {
+        directionKeyStates.removeAll()
+    }
+    
+    /// Get the current direction state for a stick and direction
+    public func getDirectionState(for stick: StickType, direction: StickDirection) -> Bool {
+        return directionKeyStates[stick]?[direction] ?? false
     }
 }
 

@@ -107,7 +107,8 @@ extension InputSource: Arbitrary {
     public static var arbitrary: Gen<InputSource> {
         Gen.one(of: [
             ButtonType.arbitrary.map { InputSource.button($0) },
-            AxisType.arbitrary.map { InputSource.axis($0) }
+            AxisType.arbitrary.map { InputSource.axis($0) },
+            DirectionInput.arbitrary.map { InputSource.direction($0) }
         ])
     }
 }

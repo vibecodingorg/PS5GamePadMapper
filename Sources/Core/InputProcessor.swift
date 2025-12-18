@@ -1,13 +1,35 @@
 import Foundation
 
 /// Input processor implementation for normalizing and processing controller inputs
-/// Requirements: 3.2, 3.4, 6.4
+/// Requirements: 1.1, 1.2, 3.2, 3.4, 6.4
 public final class InputProcessor: InputProcessorProtocol {
     
     // Track button press timestamps for hold duration calculation
     private var buttonPressTimestamps: [ButtonType: UInt64] = [:]
     
-    public init() {}
+    // MARK: - Direction Detection (Requirements: 1.1, 1.2)
+    
+    /// Direction detector instance for processing stick directions
+    private let directionDetector: DirectionDetector
+    
+    /// Buffered stick axis values for pairing X/Y inputs
+    /// Key: StickType, Value: (x: Double?, y: Double?, timestamp: UInt64?)
+    private var stickAxisBuffer: [StickType: (x: Double?, y: Double?, timestamp: UInt64?)] = [
+        .left: (nil, nil, nil),
+        .right: (nil, nil, nil)
+    ]
+    
+    /// Configuration for direction detection
+    private var directionConfig: DirectionDetector.Config
+    
+    /// Callback for direction events
+    public var onDirectionEvent: ((DirectionEvent) -> Void)?
+    
+    public init(directionDetector: DirectionDetector = DirectionDetector(),
+                directionConfig: DirectionDetector.Config = DirectionDetector.Config()) {
+        self.directionDetector = directionDetector
+        self.directionConfig = directionConfig
+    }
     
     // MARK: - InputProcessorProtocol
     
@@ -118,5 +140,107 @@ public final class InputProcessor: InputProcessorProtocol {
         } else {
             return max(-1.0, min(1.0, scaled))
         }
+    }
+    
+    // MARK: - Direction Detection Methods
+    
+    /// Updates the direction detection configuration
+    /// - Parameter config: New configuration to use
+    public func updateDirectionConfig(_ config: DirectionDetector.Config) {
+        self.directionConfig = config
+    }
+    
+    /// Gets the current direction detection configuration
+    public func getDirectionConfig() -> DirectionDetector.Config {
+        return directionConfig
+    }
+    
+    /// Process axis input for direction detection
+    /// Buffers X/Y inputs and triggers direction detection when both axes are updated
+    /// Requirements: 1.1, 1.2 - Process paired X/Y axis inputs for direction detection
+    /// - Parameters:
+    ///   - axisEvent: The processed axis event
+    ///   - timestamp: The timestamp of the input
+    /// - Returns: Array of direction events if direction detection was triggered
+    public func processAxisForDirection(_ axisEvent: AxisEvent, timestamp: UInt64) -> [DirectionEvent] {
+        // Determine which stick this axis belongs to
+        guard let stickType = axisTypeToStickType(axisEvent.axis) else {
+            // Not a stick axis (e.g., trigger), no direction processing
+            return []
+        }
+        
+        // Update the appropriate axis in the buffer
+        var buffer = stickAxisBuffer[stickType] ?? (nil, nil, nil)
+        
+        if axisEvent.axis == .leftStickX || axisEvent.axis == .rightStickX {
+            buffer.x = axisEvent.normalizedValue
+        } else if axisEvent.axis == .leftStickY || axisEvent.axis == .rightStickY {
+            buffer.y = axisEvent.normalizedValue
+        }
+        buffer.timestamp = timestamp
+        
+        stickAxisBuffer[stickType] = buffer
+        
+        // Check if we have both X and Y values to process direction
+        // Requirements: 1.1 - Trigger direction detection when both axes updated
+        guard let x = buffer.x, let y = buffer.y else {
+            return []
+        }
+        
+        // Process direction with the paired X/Y values
+        let events = directionDetector.processStickInput(
+            x: x,
+            y: y,
+            stick: stickType,
+            config: directionConfig
+        )
+        
+        // Notify via callback if set
+        for event in events {
+            onDirectionEvent?(event)
+        }
+        
+        return events
+    }
+    
+    /// Maps an AxisType to its corresponding StickType
+    /// - Parameter axis: The axis type to map
+    /// - Returns: The corresponding stick type, or nil if not a stick axis
+    private func axisTypeToStickType(_ axis: AxisType) -> StickType? {
+        switch axis {
+        case .leftStickX, .leftStickY:
+            return .left
+        case .rightStickX, .rightStickY:
+            return .right
+        case .l2Trigger, .r2Trigger:
+            return nil
+        }
+    }
+    
+    /// Gets the currently active directions for a stick
+    /// - Parameter stick: Which stick to query
+    /// - Returns: Set of currently active directions
+    public func getActiveDirections(for stick: StickType) -> Set<StickDirection> {
+        return directionDetector.getActiveDirections(for: stick)
+    }
+    
+    /// Gets the current buffered stick position
+    /// - Parameter stick: Which stick to query
+    /// - Returns: Tuple of (x, y) values, or nil if not buffered
+    public func getBufferedStickPosition(for stick: StickType) -> (x: Double, y: Double)? {
+        guard let buffer = stickAxisBuffer[stick],
+              let x = buffer.x,
+              let y = buffer.y else {
+            return nil
+        }
+        return (x, y)
+    }
+    
+    /// Resets direction detection state
+    /// Useful when controller disconnects or profile changes
+    public func resetDirectionState() {
+        directionDetector.reset()
+        stickAxisBuffer[.left] = (nil, nil, nil)
+        stickAxisBuffer[.right] = (nil, nil, nil)
     }
 }

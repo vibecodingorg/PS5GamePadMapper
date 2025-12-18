@@ -160,26 +160,38 @@ public final class AppCoordinator {
     public func start() {
         guard !isRunning else { return }
         
+        print("[DEBUG] AppCoordinator: 🚀 Starting...")
         isRunning = true
         
         // Load profiles
         do {
             try profileManager.refreshProfiles()
+            print("[DEBUG] AppCoordinator: 📋 Loaded \(profileManager.profiles.count) profiles")
             
             // Activate first profile if available
             if let firstProfile = profileManager.profiles.first {
+                print("[DEBUG] AppCoordinator: 📋 Setting active profile: \(firstProfile.name)")
                 profileManager.setActiveProfile(firstProfile)
+            } else {
+                print("[DEBUG] AppCoordinator: ⚠️ No profiles found!")
             }
         } catch {
-            print("Failed to load profiles: \(error)")
+            print("[DEBUG] AppCoordinator: ❌ Failed to load profiles: \(error)")
         }
         
+        // Check permission status
+        print("[DEBUG] AppCoordinator: 🔐 Permission canEmitEvents: \(permissionManager.canEmitEvents)")
+        print("[DEBUG] AppCoordinator: 🔐 Accessibility status: \(permissionManager.accessibilityStatus)")
+        
         // Start controller discovery
+        print("[DEBUG] AppCoordinator: 🎮 Starting controller discovery...")
         controllerManager.startDiscovery()
         
         // Start application profile switching if enabled
         applicationProfileSwitcher.loadBindingsFromAllProfiles()
         applicationProfileSwitcher.startMonitoring()
+        
+        print("[DEBUG] AppCoordinator: ✅ Started successfully")
     }
     
     /// Stop the coordinator and cleanup
@@ -233,28 +245,52 @@ public final class AppCoordinator {
     
     /// Process raw button input through the pipeline
     private func processButtonInput(_ rawInput: RawButtonInput) {
+        print("[DEBUG] 📥 Button input received: \(rawInput.button.rawValue), pressed: \(rawInput.isPressed)")
+        
         // Check if we can emit events
-        guard permissionManager.canEmitEvents else { return }
+        guard permissionManager.canEmitEvents else {
+            print("[DEBUG] ⚠️ Cannot emit events - permission denied!")
+            return
+        }
         
         // Step 1: Process through InputProcessor
         let buttonEvent = inputProcessor.processButtonInput(rawInput)
+        print("[DEBUG] 🔄 Button event processed: \(buttonEvent.button.rawValue), state: \(buttonEvent.state)")
         
         // Notify debug panel
         onInputEvent?(.button(buttonEvent))
         
+        // Check if profile is active
+        if let profile = mappingEngine.activeProfile {
+            print("[DEBUG] 📋 Active profile: \(profile.name), mappings count: \(profile.mappings.count)")
+        } else {
+            print("[DEBUG] ⚠️ No active profile!")
+        }
+        
         // Step 2: Get actions from MappingEngine
         let actions = mappingEngine.handleButtonEvent(buttonEvent)
+        print("[DEBUG] 🎯 Actions from mapping engine: \(actions.count)")
         
         // Step 3: Execute each action
         for action in actions {
+            print("[DEBUG] ▶️ Executing action: \(action)")
             executeAction(action, triggerMode: getTriggerMode(for: buttonEvent))
         }
     }
     
     /// Process raw axis input through the pipeline
     private func processAxisInput(_ rawInput: RawAxisInput) {
+        // Only log significant axis changes to avoid spam
+        if abs(rawInput.rawValue) > 10 {
+            print("[DEBUG] 📥 Axis input: \(rawInput.axis), raw: \(rawInput.rawValue)")
+        }
+        
         // Check if we can emit events
-        guard permissionManager.canEmitEvents else { return }
+        guard permissionManager.canEmitEvents else {
+            // Only log once per axis to avoid spam
+            print("[DEBUG] ⚠️ Cannot emit events - permission denied!")
+            return
+        }
         
         // Get axis-specific config or use default
         let config = axisConfigs[rawInput.axis] ?? defaultAxisConfig
@@ -268,8 +304,14 @@ public final class AppCoordinator {
         // Step 2: Get actions from MappingEngine
         let actions = mappingEngine.handleAxisEvent(axisEvent)
         
+        // Log if we got actions
+        if !actions.isEmpty {
+            print("[DEBUG] 🎯 Axis actions: \(actions.count) for \(rawInput.axis)")
+        }
+        
         // Step 3: Execute each action
         for action in actions {
+            print("[DEBUG] ▶️ Executing axis action: \(action)")
             executeAction(action, triggerMode: .press)
         }
     }
@@ -372,8 +414,17 @@ public final class AppCoordinator {
     /// Activate a profile's mappings
     private func activateProfile(_ profile: Profile?) {
         guard let profile = profile else {
+            print("[DEBUG] AppCoordinator: ⚠️ Deactivating profile (nil)")
             mappingEngine.activeProfile = nil
             return
+        }
+        
+        print("[DEBUG] AppCoordinator: 📋 Activating profile: \(profile.name)")
+        print("[DEBUG] AppCoordinator: 📋 Profile has \(profile.mappings.count) mappings")
+        
+        // Log each mapping for debugging
+        for (index, mapping) in profile.mappings.enumerated() {
+            print("[DEBUG] AppCoordinator: 📋 Mapping[\(index)]: input=\(mapping.input), trigger=\(mapping.trigger), action=\(mapping.action)")
         }
         
         // Set the profile on the mapping engine
