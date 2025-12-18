@@ -29,7 +29,7 @@ struct MainWindowView: View {
             HSplitView {
                 // Controller visualization
                 VStack {
-                    Text("Controller")
+                    Text("控制器")
                         .font(.headline)
                         .padding(.top)
                     
@@ -51,7 +51,7 @@ struct MainWindowView: View {
                     )
                     
                     if viewModel.selectedInput != nil {
-                        Button("Edit Mapping") {
+                        Button("编辑映射") {
                             showMappingEditor = true
                         }
                         .buttonStyle(.borderedProminent)

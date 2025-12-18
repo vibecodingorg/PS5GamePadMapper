@@ -10,7 +10,7 @@ struct MappingDetailPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
-            Text("Mapping Details")
+            Text("映射详情")
                 .font(.headline)
             
             Divider()
@@ -46,7 +46,7 @@ struct InputInfoSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Input")
+            Text("输入")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -57,7 +57,7 @@ struct InputInfoSection: View {
                     .font(.body)
             }
             
-            Text("Type: \(inputType)")
+            Text("类型: \(inputType)")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -75,9 +75,9 @@ struct InputInfoSection: View {
     private var inputType: String {
         switch input {
         case .button:
-            return "Button"
+            return "按钮"
         case .axis(let axisType):
-            return axisType.isTrigger ? "Trigger" : "Analog Stick"
+            return axisType.isTrigger ? "扳机" : "摇杆"
         }
     }
     
@@ -99,7 +99,7 @@ struct MappingInfoSection: View {
         VStack(alignment: .leading, spacing: 12) {
             // Trigger mode
             VStack(alignment: .leading, spacing: 4) {
-                Text("Trigger Mode")
+                Text("触发模式")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -115,7 +115,7 @@ struct MappingInfoSection: View {
             
             // Action
             VStack(alignment: .leading, spacing: 4) {
-                Text("Action")
+                Text("动作")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -152,13 +152,13 @@ struct MappingInfoSection: View {
     private var triggerDescription: String {
         switch mapping.trigger {
         case .press:
-            return "On Press"
+            return "按下时"
         case .release:
-            return "On Release"
+            return "释放时"
         case .hold(let threshold):
-            return "Hold (\(String(format: "%.1f", threshold))s)"
+            return "长按 (\(String(format: "%.1f", threshold))秒)"
         case .toggle:
-            return "Toggle"
+            return "切换"
         }
     }
     
@@ -182,19 +182,19 @@ struct MappingInfoSection: View {
     private var actionDescription: String {
         switch mapping.action {
         case .keyPress(let keyAction):
-            return "Key Press: \(keyCodeDescription(keyAction))"
+            return "按键: \(keyCodeDescription(keyAction))"
         case .keyRelease(let keyAction):
-            return "Key Release: \(keyCodeDescription(keyAction))"
+            return "释放键: \(keyCodeDescription(keyAction))"
         case .mouseButton(let mouseAction):
-            return "Mouse \(mouseAction.button.displayName)"
+            return "鼠标 \(mouseAction.button.displayName)"
         case .mouseMove:
-            return "Mouse Move"
+            return "鼠标移动"
         case .mouseScroll(let scrollAction):
-            return "Mouse Scroll \(scrollAction.direction.displayName)"
+            return "鼠标滚动 \(scrollAction.direction.displayName)"
         case .macro(let macro):
-            return "Macro: \(macro.name)"
+            return "宏: \(macro.name)"
         case .script(let script):
-            return "Script: \(script.name)"
+            return "脚本: \(script.name)"
         }
     }
     
@@ -202,15 +202,15 @@ struct MappingInfoSection: View {
         switch mapping.action {
         case .keyPress(let keyAction), .keyRelease(let keyAction):
             if !keyAction.modifiers.isEmpty {
-                return "Modifiers: \(keyAction.modifiers.description)"
+                return "修饰键: \(keyAction.modifiers.description)"
             }
             return nil
         case .mouseMove(let moveAction):
-            return "Sensitivity: \(String(format: "%.1f", moveAction.sensitivity)), Deadzone: \(String(format: "%.2f", moveAction.deadzone))"
+            return "灵敏度: \(String(format: "%.1f", moveAction.sensitivity)), 死区: \(String(format: "%.2f", moveAction.deadzone))"
         case .mouseScroll(let scrollAction):
-            return "Amount: \(String(format: "%.1f", scrollAction.amount))"
+            return "滚动量: \(String(format: "%.1f", scrollAction.amount))"
         case .macro(let macro):
-            return "\(macro.steps.count) steps, \(macro.type.description)"
+            return "\(macro.steps.count) 步, \(macro.type.description)"
         case .script:
             return nil
         default:
@@ -242,11 +242,11 @@ struct NoMappingView: View {
                 .font(.largeTitle)
                 .foregroundColor(.secondary)
             
-            Text("No Mapping Configured")
+            Text("未配置映射")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
-            Text("Click 'Edit Mapping' to configure this input")
+            Text("点击「编辑映射」来配置此输入")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -264,11 +264,11 @@ struct NoSelectionView: View {
                 .font(.largeTitle)
                 .foregroundColor(.secondary)
             
-            Text("No Input Selected")
+            Text("未选择输入")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
-            Text("Click on a button or axis on the controller to view its mapping")
+            Text("点击控制器上的按钮或摇杆来查看其映射")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -283,24 +283,24 @@ struct NoSelectionView: View {
 extension ButtonType {
     var displayName: String {
         switch self {
-        case .cross: return "Cross (X)"
-        case .circle: return "Circle (O)"
-        case .square: return "Square"
-        case .triangle: return "Triangle"
+        case .cross: return "叉键 (X)"
+        case .circle: return "圆键 (O)"
+        case .square: return "方键"
+        case .triangle: return "三角键"
         case .l1: return "L1"
         case .r1: return "R1"
         case .l2: return "L2"
         case .r2: return "R2"
-        case .l3: return "L3 (Left Stick)"
-        case .r3: return "R3 (Right Stick)"
-        case .dpadUp: return "D-Pad Up"
-        case .dpadDown: return "D-Pad Down"
-        case .dpadLeft: return "D-Pad Left"
-        case .dpadRight: return "D-Pad Right"
-        case .share: return "Share"
-        case .options: return "Options"
-        case .ps: return "PS Button"
-        case .touchpad: return "Touchpad"
+        case .l3: return "L3 (左摇杆)"
+        case .r3: return "R3 (右摇杆)"
+        case .dpadUp: return "方向键 上"
+        case .dpadDown: return "方向键 下"
+        case .dpadLeft: return "方向键 左"
+        case .dpadRight: return "方向键 右"
+        case .share: return "分享键"
+        case .options: return "选项键"
+        case .ps: return "PS键"
+        case .touchpad: return "触摸板"
         }
     }
 }
@@ -308,12 +308,12 @@ extension ButtonType {
 extension AxisType {
     var displayName: String {
         switch self {
-        case .leftStickX: return "Left Stick X"
-        case .leftStickY: return "Left Stick Y"
-        case .rightStickX: return "Right Stick X"
-        case .rightStickY: return "Right Stick Y"
-        case .l2Trigger: return "L2 Trigger"
-        case .r2Trigger: return "R2 Trigger"
+        case .leftStickX: return "左摇杆 X"
+        case .leftStickY: return "左摇杆 Y"
+        case .rightStickX: return "右摇杆 X"
+        case .rightStickY: return "右摇杆 Y"
+        case .l2Trigger: return "L2 扳机"
+        case .r2Trigger: return "R2 扳机"
         }
     }
 }
@@ -321,9 +321,9 @@ extension AxisType {
 extension MouseButton {
     var displayName: String {
         switch self {
-        case .left: return "Left Click"
-        case .right: return "Right Click"
-        case .middle: return "Middle Click"
+        case .left: return "左键"
+        case .right: return "右键"
+        case .middle: return "中键"
         }
     }
 }
@@ -331,10 +331,10 @@ extension MouseButton {
 extension ScrollDirection {
     var displayName: String {
         switch self {
-        case .up: return "Up"
-        case .down: return "Down"
-        case .left: return "Left"
-        case .right: return "Right"
+        case .up: return "向上"
+        case .down: return "向下"
+        case .left: return "向左"
+        case .right: return "向右"
         }
     }
 }
@@ -343,16 +343,16 @@ extension MacroType {
     var description: String {
         switch self {
         case .sequence:
-            return "Sequence"
+            return "序列"
         case .loop(let interval, let maxCount):
             if maxCount == 0 {
-                return "Loop (∞, \(interval)ms)"
+                return "循环 (∞, \(interval)毫秒)"
             }
-            return "Loop (\(maxCount)x, \(interval)ms)"
+            return "循环 (\(maxCount)次, \(interval)毫秒)"
         case .toggle:
-            return "Toggle"
+            return "切换"
         case .whileCondition(let condition):
-            return "While (\(condition))"
+            return "条件循环 (\(condition))"
         }
     }
 }

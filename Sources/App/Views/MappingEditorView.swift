@@ -4,10 +4,10 @@ import PS5GamePadMapperCore
 /// Action type categories for mapping configuration
 /// Requirements: 19.1 - Provide options to select action type: Key, Mouse, Macro, or Script
 enum ActionCategory: String, CaseIterable, Identifiable {
-    case key = "Key"
-    case mouse = "Mouse"
-    case macro = "Macro"
-    case script = "Script"
+    case key = "按键"
+    case mouse = "鼠标"
+    case macro = "宏"
+    case script = "脚本"
     
     var id: String { rawValue }
     
@@ -103,7 +103,7 @@ struct MappingEditorView: View {
     
     private var headerView: some View {
         HStack {
-            Text("Edit Mapping")
+            Text("编辑映射")
                 .font(.headline)
             Spacer()
             Button(action: { dismiss() }) {
@@ -119,7 +119,7 @@ struct MappingEditorView: View {
     
     private var inputInfoSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Input")
+            Text("输入")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -154,11 +154,11 @@ struct MappingEditorView: View {
     
     private var triggerModeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Trigger Mode")
+            Text("触发模式")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
-            Picker("Trigger Mode", selection: $selectedTriggerMode) {
+            Picker("触发模式", selection: $selectedTriggerMode) {
                 ForEach(TriggerModeOption.allCases) { mode in
                     Text(mode.displayName).tag(mode)
                 }
@@ -170,9 +170,9 @@ struct MappingEditorView: View {
             
             if selectedTriggerMode == .hold {
                 HStack {
-                    Text("Hold Duration:")
+                    Text("长按时长:")
                     Slider(value: $holdThreshold, in: 0.1...3.0, step: 0.1)
-                    Text("\(String(format: "%.1f", holdThreshold))s")
+                    Text("\(String(format: "%.1f", holdThreshold))秒")
                         .frame(width: 40)
                 }
                 .onChange(of: holdThreshold) { _ in
@@ -186,7 +186,7 @@ struct MappingEditorView: View {
     
     private var actionTypeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Action Type")
+            Text("动作类型")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -225,7 +225,7 @@ struct MappingEditorView: View {
     
     private var footerView: some View {
         HStack {
-            Button("Clear Mapping") {
+            Button("清除映射") {
                 onMappingChanged(nil)
                 dismiss()
             }
@@ -233,7 +233,7 @@ struct MappingEditorView: View {
             
             Spacer()
             
-            Button("Done") {
+            Button("完成") {
                 dismiss()
             }
             .keyboardShortcut(.defaultAction)
@@ -245,7 +245,7 @@ struct MappingEditorView: View {
     
     private var keyActionConfiguration: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Key Configuration")
+            Text("按键配置")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -269,12 +269,12 @@ struct MappingEditorView: View {
     
     private var mouseActionConfiguration: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Mouse Configuration")
+            Text("鼠标配置")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
             // Mouse action type
-            Picker("Action", selection: $mouseActionType) {
+            Picker("动作", selection: $mouseActionType) {
                 ForEach(MouseActionType.allCases) { type in
                     Text(type.displayName).tag(type)
                 }
@@ -286,7 +286,7 @@ struct MappingEditorView: View {
             
             switch mouseActionType {
             case .click:
-                Picker("Button", selection: $mouseButton) {
+                Picker("按钮", selection: $mouseButton) {
                     ForEach([MouseButton.left, .right, .middle], id: \.self) { button in
                         Text(button.displayName).tag(button)
                     }
@@ -296,7 +296,7 @@ struct MappingEditorView: View {
                 }
                 
             case .scroll:
-                Picker("Direction", selection: $scrollDirection) {
+                Picker("方向", selection: $scrollDirection) {
                     ForEach([ScrollDirection.up, .down, .left, .right], id: \.self) { dir in
                         Text(dir.displayName).tag(dir)
                     }
@@ -306,7 +306,7 @@ struct MappingEditorView: View {
                 }
                 
                 HStack {
-                    Text("Amount:")
+                    Text("滚动量:")
                     Slider(value: $scrollAmount, in: 0.5...10.0, step: 0.5)
                     Text("\(String(format: "%.1f", scrollAmount))")
                         .frame(width: 40)
@@ -332,17 +332,17 @@ struct MappingEditorView: View {
     
     private var macroActionConfiguration: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Macro Selection")
+            Text("选择宏")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
             if availableMacros.isEmpty {
-                Text("No macros available. Create macros in the Macro Editor.")
+                Text("暂无可用宏。请在宏编辑器中创建。")
                     .foregroundColor(.secondary)
                     .italic()
             } else {
-                Picker("Select Macro", selection: $selectedMacroId) {
-                    Text("None").tag(nil as UUID?)
+                Picker("选择宏", selection: $selectedMacroId) {
+                    Text("无").tag(nil as UUID?)
                     ForEach(availableMacros) { macro in
                         Text(macro.name).tag(macro.id as UUID?)
                     }
@@ -363,17 +363,17 @@ struct MappingEditorView: View {
     
     private var scriptActionConfiguration: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Script Selection")
+            Text("选择脚本")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
             if availableScripts.isEmpty {
-                Text("No scripts available. Create scripts in the Macro Editor.")
+                Text("暂无可用脚本。请在宏编辑器中创建。")
                     .foregroundColor(.secondary)
                     .italic()
             } else {
-                Picker("Select Script", selection: $selectedScriptId) {
-                    Text("None").tag(nil as UUID?)
+                Picker("选择脚本", selection: $selectedScriptId) {
+                    Text("无").tag(nil as UUID?)
                     ForEach(availableScripts) { script in
                         Text(script.name).tag(script.id as UUID?)
                     }
@@ -514,10 +514,10 @@ struct MappingEditorView: View {
 // MARK: - Supporting Types
 
 enum TriggerModeOption: String, CaseIterable, Identifiable {
-    case press = "Press"
-    case release = "Release"
-    case hold = "Hold"
-    case toggle = "Toggle"
+    case press = "按下"
+    case release = "释放"
+    case hold = "长按"
+    case toggle = "切换"
     
     var id: String { rawValue }
     
@@ -525,9 +525,9 @@ enum TriggerModeOption: String, CaseIterable, Identifiable {
 }
 
 enum MouseActionType: String, CaseIterable, Identifiable {
-    case click = "Click"
-    case scroll = "Scroll"
-    case move = "Move"
+    case click = "点击"
+    case scroll = "滚动"
+    case move = "移动"
     
     var id: String { rawValue }
     
@@ -535,8 +535,8 @@ enum MouseActionType: String, CaseIterable, Identifiable {
 }
 
 enum ResponseCurveOption: String, CaseIterable, Identifiable {
-    case linear = "Linear"
-    case exponential = "Exponential"
+    case linear = "线性"
+    case exponential = "指数"
     
     var id: String { rawValue }
 }
@@ -575,10 +575,10 @@ struct MacroPreviewView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Type: \(macro.type.description)")
+            Text("类型: \(macro.type.description)")
                 .font(.caption)
                 .foregroundColor(.secondary)
-            Text("Steps: \(macro.steps.count)")
+            Text("步骤数: \(macro.steps.count)")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -595,7 +595,7 @@ struct ScriptPreviewView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Source Preview:")
+            Text("源码预览:")
                 .font(.caption)
                 .foregroundColor(.secondary)
             Text(script.source.prefix(100) + (script.source.count > 100 ? "..." : ""))

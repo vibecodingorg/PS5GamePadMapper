@@ -12,7 +12,7 @@ struct KeyCaptureView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Target Key")
+            Text("目标按键")
                 .font(.caption)
                 .foregroundColor(.secondary)
             
@@ -31,14 +31,14 @@ struct KeyCaptureView: View {
                     )
                 
                 // Capture button
-                Button(isCapturing ? "Cancel" : "Capture") {
+                Button(isCapturing ? "取消" : "捕获") {
                     isCapturing.toggle()
                 }
                 .buttonStyle(.bordered)
             }
             
             if isCapturing {
-                Text("Press any key to capture...")
+                Text("按下任意键进行捕获...")
                     .font(.caption)
                     .foregroundColor(.accentColor)
             }
@@ -146,7 +146,7 @@ struct ModifierKeysSelector: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Modifier Keys")
+            Text("修饰键")
                 .font(.caption)
                 .foregroundColor(.secondary)
             

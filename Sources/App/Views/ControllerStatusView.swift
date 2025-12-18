@@ -26,7 +26,7 @@ struct ControllerStatusView: View {
                     BatteryIndicator(level: batteryLevel)
                 }
             } else {
-                Text("No Controller Connected")
+                Text("未连接控制器")
                     .font(.headline)
                     .foregroundColor(.secondary)
             }

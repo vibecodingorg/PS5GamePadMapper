@@ -10,13 +10,13 @@ struct ProfileSelectorView: View {
     
     var body: some View {
         HStack {
-            Text("Profile:")
+            Text("配置文件:")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
             Menu {
                 if profiles.isEmpty {
-                    Text("No profiles available")
+                    Text("暂无配置文件")
                         .foregroundColor(.secondary)
                 } else {
                     ForEach(profiles) { profile in
@@ -39,11 +39,11 @@ struct ProfileSelectorView: View {
                 Button(action: {
                     // Create new profile action - to be implemented in Mapping Editor
                 }) {
-                    Label("Create New Profile...", systemImage: "plus")
+                    Label("新建配置文件...", systemImage: "plus")
                 }
             } label: {
                 HStack {
-                    Text(selectedProfile?.name ?? "Select Profile")
+                    Text(selectedProfile?.name ?? "选择配置文件")
                         .frame(minWidth: 150, alignment: .leading)
                     Image(systemName: "chevron.down")
                         .font(.caption)

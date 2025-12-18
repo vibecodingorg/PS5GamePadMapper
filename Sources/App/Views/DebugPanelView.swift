@@ -10,10 +10,10 @@ struct DebugPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Header
             HStack {
-                Text("Debug Panel")
+                Text("调试面板")
                     .font(.headline)
                 Spacer()
-                Button("Clear") {
+                Button("清除") {
                     viewModel.clearLogs()
                 }
                 .buttonStyle(.bordered)
@@ -27,25 +27,25 @@ struct DebugPanelView: View {
                 // Input Events Tab
                 inputEventsTab
                     .tabItem {
-                        Label("Input Events", systemImage: "gamecontroller")
+                        Label("输入事件", systemImage: "gamecontroller")
                     }
                 
                 // Mapping Actions Tab
                 mappingActionsTab
                     .tabItem {
-                        Label("Actions", systemImage: "arrow.right.circle")
+                        Label("动作", systemImage: "arrow.right.circle")
                     }
                 
                 // Macro State Tab
                 macroStateTab
                     .tabItem {
-                        Label("Macros", systemImage: "repeat")
+                        Label("宏", systemImage: "repeat")
                     }
                 
                 // Axis Values Tab
                 axisValuesTab
                     .tabItem {
-                        Label("Axes", systemImage: "slider.horizontal.3")
+                        Label("轴", systemImage: "slider.horizontal.3")
                     }
             }
             .padding()
@@ -66,7 +66,7 @@ struct DebugPanelView: View {
     /// Requirements: 15.1 - Display input event within 50ms
     private var inputEventsTab: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Recent Input Events")
+            Text("最近输入事件")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -95,7 +95,7 @@ struct DebugPanelView: View {
     /// Requirements: 15.2 - Display action in debug panel
     private var mappingActionsTab: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Executed Actions")
+            Text("已执行动作")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -127,9 +127,9 @@ struct DebugPanelView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Running instances section
             /// Requirements: 1.6 - Display all running macro instances with their states
-            GroupBox("Running Macro Instances (\(viewModel.runningInstances.count))") {
+            GroupBox("运行中的宏实例 (\(viewModel.runningInstances.count))") {
                 if viewModel.runningInstances.isEmpty {
-                    Text("No macros currently running")
+                    Text("当前没有运行中的宏")
                         .foregroundColor(.secondary)
                         .italic()
                         .padding(.vertical, 8)
@@ -148,25 +148,25 @@ struct DebugPanelView: View {
             
             // Legacy single macro state (for backward compatibility)
             if viewModel.macroState.isRunning, let macroName = viewModel.macroState.currentMacroName {
-                GroupBox("Current Macro State") {
+                GroupBox("当前宏状态") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Status:")
+                            Text("状态:")
                                 .foregroundColor(.secondary)
-                            Text("Running")
+                            Text("运行中")
                                 .foregroundColor(.green)
                                 .fontWeight(.medium)
                         }
                         
                         HStack {
-                            Text("Macro:")
+                            Text("宏:")
                                 .foregroundColor(.secondary)
                             Text(macroName)
                         }
                         
                         if let step = viewModel.macroState.currentStep {
                             HStack {
-                                Text("Current Step:")
+                                Text("当前步骤:")
                                     .foregroundColor(.secondary)
                                 Text("\(step + 1)")
                             }
@@ -174,7 +174,7 @@ struct DebugPanelView: View {
                         
                         if let totalSteps = viewModel.macroState.totalSteps {
                             HStack {
-                                Text("Total Steps:")
+                                Text("总步骤:")
                                     .foregroundColor(.secondary)
                                 Text("\(totalSteps)")
                             }
@@ -186,7 +186,7 @@ struct DebugPanelView: View {
             }
             
             // Macro execution history
-            Text("Macro Execution History")
+            Text("宏执行历史")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -206,7 +206,7 @@ struct DebugPanelView: View {
     /// Requirements: 15.4 - Show normalized value with 2 decimal precision
     private var axisValuesTab: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Current Axis Values")
+            Text("当前轴值")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -371,7 +371,7 @@ struct RunningMacroInstanceRow: View {
             
             HStack(spacing: 16) {
                 HStack(spacing: 4) {
-                    Text("Step:")
+                    Text("步骤:")
                         .foregroundColor(.secondary)
                     Text("\(instance.currentStep + 1)/\(instance.totalSteps)")
                 }
@@ -379,7 +379,7 @@ struct RunningMacroInstanceRow: View {
                 
                 if instance.loopCount > 0 {
                     HStack(spacing: 4) {
-                        Text("Loop:")
+                        Text("循环:")
                             .foregroundColor(.secondary)
                         Text("\(instance.loopCount)")
                     }
@@ -388,7 +388,7 @@ struct RunningMacroInstanceRow: View {
                 
                 if instance.pressedKeysCount > 0 {
                     HStack(spacing: 4) {
-                        Text("Keys held:")
+                        Text("按住的键:")
                             .foregroundColor(.secondary)
                         Text("\(instance.pressedKeysCount)")
                     }
@@ -474,7 +474,7 @@ struct DebugInputEvent: Identifiable {
     init(button: ButtonType, isPressed: Bool) {
         self.timestamp = Self.currentTimestamp()
         self.inputName = button.rawValue
-        self.value = isPressed ? "Pressed" : "Released"
+        self.value = isPressed ? "按下" : "释放"
         self.isButton = true
     }
     

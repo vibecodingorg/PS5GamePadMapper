@@ -14,11 +14,11 @@ struct PermissionStatusView: View {
                     .font(.system(size: 48))
                     .foregroundColor(.orange)
                 
-                Text("Permissions Required")
+                Text("需要权限")
                     .font(.title)
                     .fontWeight(.semibold)
                 
-                Text("PS5GamePadMapper needs certain permissions to function properly.")
+                Text("PS5GamePadMapper 需要某些权限才能正常运行。")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -28,16 +28,16 @@ struct PermissionStatusView: View {
             // Permission cards
             VStack(spacing: 16) {
                 PermissionCard(
-                    title: "Accessibility",
-                    description: "Required to emit keyboard and mouse events",
+                    title: "辅助功能",
+                    description: "用于发送键盘和鼠标事件",
                     status: viewModel.accessibilityStatus,
                     isRequired: true,
                     onRequestPermission: viewModel.requestAccessibilityPermission
                 )
                 
                 PermissionCard(
-                    title: "Bluetooth",
-                    description: "Required for wireless controller support",
+                    title: "蓝牙",
+                    description: "用于无线控制器支持",
                     status: viewModel.bluetoothStatus,
                     isRequired: false,
                     onRequestPermission: viewModel.requestBluetoothPermission
@@ -55,7 +55,7 @@ struct PermissionStatusView: View {
             
             // Continue button (only if accessibility is granted)
             if viewModel.accessibilityStatus == .granted {
-                Button("Continue") {
+                Button("继续") {
                     viewModel.onContinue?()
                 }
                 .buttonStyle(.borderedProminent)
@@ -91,7 +91,7 @@ struct PermissionCard: View {
                         .font(.headline)
                     
                     if isRequired {
-                        Text("Required")
+                        Text("必需")
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -99,7 +99,7 @@ struct PermissionCard: View {
                             .foregroundColor(.red)
                             .cornerRadius(4)
                     } else {
-                        Text("Optional")
+                        Text("可选")
                             .font(.caption)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -118,7 +118,7 @@ struct PermissionCard: View {
             
             // Action button
             if status != .granted {
-                Button("Grant") {
+                Button("授权") {
                     onRequestPermission()
                 }
                 .buttonStyle(.bordered)
@@ -183,7 +183,7 @@ struct LimitationMessageView: View {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
-                Text("Limited Functionality")
+                Text("功能受限")
                     .font(.headline)
             }
             

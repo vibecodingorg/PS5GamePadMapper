@@ -63,7 +63,7 @@ struct MacroEditorView: View {
     
     private var headerView: some View {
         HStack {
-            Text(macro != nil || script != nil ? "Edit Macro/Script" : "Create Macro/Script")
+            Text(macro != nil || script != nil ? "编辑宏/脚本" : "创建宏/脚本")
                 .font(.headline)
             Spacer()
             Button(action: { dismiss() }) {
@@ -78,7 +78,7 @@ struct MacroEditorView: View {
     // MARK: - Mode Selector
     
     private var modeSelectorView: some View {
-        Picker("Editor Mode", selection: $editorMode) {
+        Picker("编辑模式", selection: $editorMode) {
             ForEach(MacroEditorMode.allCases) { mode in
                 Text(mode.displayName).tag(mode)
             }
@@ -95,24 +95,24 @@ struct MacroEditorView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Macro name
             VStack(alignment: .leading, spacing: 4) {
-                Text("Macro Name")
+                Text("宏名称")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("Enter macro name", text: $macroName)
+                TextField("输入宏名称", text: $macroName)
                     .textFieldStyle(.roundedBorder)
             }
             
             // Macro type selector
             /// Requirements: 4.1 - Support whileCondition type with condition expression
             VStack(alignment: .leading, spacing: 4) {
-                Text("Macro Type")
+                Text("宏类型")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                Picker("Type", selection: $macroType) {
-                    Text("Sequence").tag(MacroType.sequence)
-                    Text("Loop (Turbo)").tag(MacroType.loop(interval: loopInterval, maxCount: loopMaxCount))
-                    Text("Toggle").tag(MacroType.toggle)
-                    Text("While Condition").tag(MacroType.whileCondition(condition: whileCondition))
+                Picker("类型", selection: $macroType) {
+                    Text("序列").tag(MacroType.sequence)
+                    Text("循环 (连发)").tag(MacroType.loop(interval: loopInterval, maxCount: loopMaxCount))
+                    Text("切换").tag(MacroType.toggle)
+                    Text("条件循环").tag(MacroType.whileCondition(condition: whileCondition))
                 }
                 .pickerStyle(.segmented)
             }
@@ -146,7 +146,7 @@ struct MacroEditorView: View {
     private var loopParametersView: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Interval (ms):")
+                Text("间隔 (毫秒):")
                 TextField("", value: $loopInterval, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)
@@ -155,7 +155,7 @@ struct MacroEditorView: View {
             }
             
             HStack {
-                Text("Max Count (0 = infinite):")
+                Text("最大次数 (0 = 无限):")
                 TextField("", value: $loopMaxCount, format: .number)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 80)
@@ -176,7 +176,7 @@ struct MacroEditorView: View {
     private var whileConditionParametersView: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Condition Expression")
+                Text("条件表达式")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Spacer()
@@ -194,14 +194,14 @@ struct MacroEditorView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
-                        Text("Valid condition")
+                        Text("条件有效")
                             .font(.caption)
                             .foregroundColor(.green)
                     }
                 }
             }
             
-            TextField("e.g., isButtonPressed(cross) || isButtonPressed(circle)", text: $whileCondition)
+            TextField("例如: isButtonPressed(cross) || isButtonPressed(circle)", text: $whileCondition)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onChange(of: whileCondition) { newValue in
@@ -211,7 +211,7 @@ struct MacroEditorView: View {
             
             // Condition syntax help
             VStack(alignment: .leading, spacing: 4) {
-                Text("Supported syntax:")
+                Text("支持的语法:")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
@@ -226,7 +226,7 @@ struct MacroEditorView: View {
                     }
                 }
                 
-                Text("Buttons: cross, circle, square, triangle, l1, r1, l2, r2, l3, r3, options, share, ps, touchpad, dpadUp, dpadDown, dpadLeft, dpadRight")
+                Text("按钮: cross, circle, square, triangle, l1, r1, l2, r2, l3, r3, options, share, ps, touchpad, dpadUp, dpadDown, dpadLeft, dpadRight")
                     .font(.caption2)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
@@ -256,14 +256,14 @@ struct MacroEditorView: View {
             _ = try parser.parseCondition(condition)
             conditionError = nil
         } catch {
-            conditionError = "Invalid condition"
+            conditionError = "条件无效"
         }
     }
     
     /// Requirements: 20.3 - Provide controls to start, stop, and clear the recording
     private var recordingControlsView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Recording")
+            Text("录制")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -279,7 +279,7 @@ struct MacroEditorView: View {
                     HStack {
                         Image(systemName: recorder.isRecording ? "stop.fill" : "record.circle")
                             .foregroundColor(recorder.isRecording ? .red : .primary)
-                        Text(recorder.isRecording ? "Stop" : "Start Recording")
+                        Text(recorder.isRecording ? "停止" : "开始录制")
                     }
                     .frame(minWidth: 140)
                 }
@@ -292,7 +292,7 @@ struct MacroEditorView: View {
                 }) {
                     HStack {
                         Image(systemName: "trash")
-                        Text("Clear")
+                        Text("清除")
                     }
                 }
                 .buttonStyle(.bordered)
@@ -306,7 +306,7 @@ struct MacroEditorView: View {
                         Circle()
                             .fill(Color.red)
                             .frame(width: 8, height: 8)
-                        Text("Recording...")
+                        Text("录制中...")
                             .font(.caption)
                             .foregroundColor(.red)
                     }
@@ -314,7 +314,7 @@ struct MacroEditorView: View {
             }
             
             if recorder.isRecording {
-                Text("Press keys or click mouse buttons to record. Timing between inputs will be captured as delays.")
+                Text("按下键盘或点击鼠标按钮进行录制。输入之间的时间间隔将被记录为延迟。")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -326,14 +326,14 @@ struct MacroEditorView: View {
     private var recordedStepsView: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Recorded Steps (\(recorder.steps.count))")
+                Text("已录制步骤 (\(recorder.steps.count))")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Spacer()
             }
             
             if recorder.steps.isEmpty {
-                Text("No steps recorded yet. Start recording to capture inputs.")
+                Text("尚未录制任何步骤。开始录制以捕获输入。")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .italic()
@@ -366,10 +366,10 @@ struct MacroEditorView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Script name
             VStack(alignment: .leading, spacing: 4) {
-                Text("Script Name")
+                Text("脚本名称")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                TextField("Enter script name", text: $scriptName)
+                TextField("输入脚本名称", text: $scriptName)
                     .textFieldStyle(.roundedBorder)
             }
             
@@ -377,7 +377,7 @@ struct MacroEditorView: View {
             /// Requirements: 20.6 - Provide a text editor for entering macro scripts
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("Script Source")
+                    Text("脚本源码")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -396,7 +396,7 @@ struct MacroEditorView: View {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
-                            Text("Valid syntax")
+                            Text("语法正确")
                                 .font(.caption)
                                 .foregroundColor(.green)
                         }
@@ -418,7 +418,7 @@ struct MacroEditorView: View {
     
     private var scriptAPIReferenceView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Available Functions")
+            Text("可用函数")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             
@@ -441,13 +441,13 @@ struct MacroEditorView: View {
     
     private var footerView: some View {
         HStack {
-            Button("Cancel") {
+            Button("取消") {
                 dismiss()
             }
             
             Spacer()
             
-            Button("Save") {
+            Button("保存") {
                 saveAndDismiss()
             }
             .buttonStyle(.borderedProminent)
@@ -539,8 +539,8 @@ struct MacroEditorView: View {
 // MARK: - Supporting Types
 
 enum MacroEditorMode: String, CaseIterable, Identifiable {
-    case recording = "Recording"
-    case script = "Script"
+    case recording = "录制"
+    case script = "脚本"
     
     var id: String { rawValue }
     var displayName: String { rawValue }
@@ -712,7 +712,7 @@ struct MacroStepRow: View {
                 // Editable delay
                 /// Requirements: 20.4 - Allow modifying delay values
                 HStack {
-                    Text("Delay:")
+                    Text("延迟:")
                     TextField("", value: $delayValue, format: .number)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 60)
@@ -720,7 +720,7 @@ struct MacroStepRow: View {
                         .onChange(of: delayValue) { newValue in
                             onDelayChanged(newValue)
                         }
-                    Text("ms")
+                    Text("毫秒")
                         .foregroundColor(.secondary)
                 }
             } else {
@@ -764,15 +764,15 @@ struct MacroStepRow: View {
     private var stepDescription: String {
         switch step {
         case .keyDown(let keyCode):
-            return "Key Down: \(KeyCodeHelper.keyName(for: keyCode))"
+            return "按下键: \(KeyCodeHelper.keyName(for: keyCode))"
         case .keyUp(let keyCode):
-            return "Key Up: \(KeyCodeHelper.keyName(for: keyCode))"
+            return "释放键: \(KeyCodeHelper.keyName(for: keyCode))"
         case .mouseClick(let button):
-            return "Mouse Click: \(button.rawValue)"
+            return "鼠标点击: \(button.rawValue)"
         case .mouseMove(let dx, let dy):
-            return "Mouse Move: (\(dx), \(dy))"
+            return "鼠标移动: (\(dx), \(dy))"
         case .delay(let ms):
-            return "Delay: \(ms)ms"
+            return "延迟: \(ms)毫秒"
         }
     }
 }

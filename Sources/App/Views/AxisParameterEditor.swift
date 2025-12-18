@@ -32,13 +32,13 @@ struct AxisParameterEditor: View {
     private var deadzoneSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Deadzone")
+                Text("死区")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
                 Spacer()
                 
-                Text("Range: 0.0 - 0.5")
+                Text("范围: 0.0 - 0.5")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -76,13 +76,13 @@ struct AxisParameterEditor: View {
     private var sensitivitySection: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Sensitivity")
+                Text("灵敏度")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
                 Spacer()
                 
-                Text("Range: 0.1 - 10.0")
+                Text("范围: 0.1 - 10.0")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -119,11 +119,11 @@ struct AxisParameterEditor: View {
     
     private var responseCurveSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Response Curve")
+            Text("响应曲线")
                 .font(.caption)
                 .foregroundColor(.secondary)
             
-            Picker("Curve Type", selection: $responseCurve) {
+            Picker("曲线类型", selection: $responseCurve) {
                 ForEach(ResponseCurveOption.allCases) { curve in
                     Text(curve.rawValue).tag(curve)
                 }
@@ -135,7 +135,7 @@ struct AxisParameterEditor: View {
             
             if responseCurve == .exponential {
                 HStack {
-                    Text("Power:")
+                    Text("指数:")
                         .font(.caption)
                     
                     Slider(value: $exponentialPower, in: 1.5...4.0, step: 0.1)
@@ -271,13 +271,13 @@ struct SensitivityIndicator: View {
     
     private var sensitivityLabel: String {
         if sensitivity < 1.0 {
-            return "Low"
+            return "低"
         } else if sensitivity < 3.0 {
-            return "Normal"
+            return "正常"
         } else if sensitivity < 6.0 {
-            return "High"
+            return "高"
         } else {
-            return "Very High"
+            return "非常高"
         }
     }
 }
@@ -330,7 +330,7 @@ struct ResponseCurveVisualization: View {
                 // Labels
                 VStack {
                     HStack {
-                        Text("Output")
+                        Text("输出")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         Spacer()
@@ -338,7 +338,7 @@ struct ResponseCurveVisualization: View {
                     Spacer()
                     HStack {
                         Spacer()
-                        Text("Input")
+                        Text("输入")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
