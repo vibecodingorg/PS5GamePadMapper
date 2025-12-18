@@ -104,11 +104,39 @@ public final class ControllerManager: ControllerManagerProtocol {
     /// Callback for controller reconnection (for profile restoration)
     public var onControllerReconnected: ((Controller) -> Void)?
     
-    /// Callback for button input events
+    /// Callback for button input events (legacy - use addButtonInputHandler for multiple handlers)
     public var onButtonInput: ((RawButtonInput) -> Void)?
     
-    /// Callback for axis input events
+    /// Callback for axis input events (legacy - use addAxisInputHandler for multiple handlers)
     public var onAxisInput: ((RawAxisInput) -> Void)?
+    
+    /// Multiple button input handlers (keyed by identifier)
+    private var buttonInputHandlers: [String: (RawButtonInput) -> Void] = [:]
+    
+    /// Multiple axis input handlers (keyed by identifier)
+    private var axisInputHandlers: [String: (RawAxisInput) -> Void] = [:]
+    
+    /// Add a button input handler with an identifier
+    public func addButtonInputHandler(id: String, handler: @escaping (RawButtonInput) -> Void) {
+        buttonInputHandlers[id] = handler
+        NSLog("[DEBUG] ControllerManager: ➕ Added button input handler: %@, total: %d", id, buttonInputHandlers.count)
+    }
+    
+    /// Remove a button input handler by identifier
+    public func removeButtonInputHandler(id: String) {
+        buttonInputHandlers.removeValue(forKey: id)
+        NSLog("[DEBUG] ControllerManager: ➖ Removed button input handler: %@, total: %d", id, buttonInputHandlers.count)
+    }
+    
+    /// Add an axis input handler with an identifier
+    public func addAxisInputHandler(id: String, handler: @escaping (RawAxisInput) -> Void) {
+        axisInputHandlers[id] = handler
+    }
+    
+    /// Remove an axis input handler by identifier
+    public func removeAxisInputHandler(id: String) {
+        axisInputHandlers.removeValue(forKey: id)
+    }
     
     private var hidManager: IOHIDManager?
     private var deviceStates: [String: DeviceState] = [:]
@@ -565,8 +593,18 @@ public final class ControllerManager: ControllerManagerProtocol {
             
             let input = RawAxisInput(axis: axis, rawValue: rawValue, timestamp: timestamp)
             
-            inputQueue.async { [weak self] in
-                self?.onAxisInput?(input)
+            // Capture all handlers before async dispatch
+            let legacyCallback = self.onAxisInput
+            let handlers = self.axisInputHandlers
+            
+            inputQueue.async {
+                // Call legacy callback if set
+                legacyCallback?(input)
+                
+                // Call all registered handlers
+                for (_, handler) in handlers {
+                    handler(input)
+                }
             }
         }
     }
@@ -586,14 +624,23 @@ public final class ControllerManager: ControllerManagerProtocol {
             
             let input = RawButtonInput(button: button, isPressed: isPressed, timestamp: timestamp)
             
-            if self.onButtonInput != nil {
-                NSLog("[DEBUG] ControllerManager: ✅ onButtonInput callback is set, dispatching...")
-            } else {
-                NSLog("[DEBUG] ControllerManager: ⚠️ onButtonInput callback is NOT set!")
-            }
+            // Capture all handlers before async dispatch
+            let legacyCallback = self.onButtonInput
+            let handlers = self.buttonInputHandlers
             
-            inputQueue.async { [weak self] in
-                self?.onButtonInput?(input)
+            let totalHandlers = (legacyCallback != nil ? 1 : 0) + handlers.count
+            NSLog("[DEBUG] ControllerManager: 📤 Dispatching to %d handler(s)", totalHandlers)
+            
+            // Dispatch to input queue for processing
+            inputQueue.async {
+                // Call legacy callback if set
+                legacyCallback?(input)
+                
+                // Call all registered handlers
+                for (handlerId, handler) in handlers {
+                    NSLog("[DEBUG] ControllerManager: 🔄 Executing handler: %@", handlerId)
+                    handler(input)
+                }
             }
         }
     }

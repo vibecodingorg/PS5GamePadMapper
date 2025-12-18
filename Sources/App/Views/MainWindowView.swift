@@ -449,8 +449,8 @@ class MainWindowViewModel: ObservableObject {
             }
         }
         
-        // Button input callback for UI visualization
-        coordinator.controllerManager.onButtonInput = { [weak self] rawInput in
+        // Button input callback for UI visualization - use addButtonInputHandler to support multiple handlers
+        coordinator.controllerManager.addButtonInputHandler(id: "MainWindowView") { [weak self] rawInput in
             Task { @MainActor in
                 guard let self = self else { return }
                 if rawInput.isPressed {
@@ -461,8 +461,8 @@ class MainWindowViewModel: ObservableObject {
             }
         }
         
-        // Axis input callback for UI visualization
-        coordinator.controllerManager.onAxisInput = { [weak self] rawInput in
+        // Axis input callback for UI visualization - use addAxisInputHandler to support multiple handlers
+        coordinator.controllerManager.addAxisInputHandler(id: "MainWindowView") { [weak self] rawInput in
             Task { @MainActor in
                 guard let self = self else { return }
                 let config = self.coordinator.getAxisConfig(for: rawInput.axis)

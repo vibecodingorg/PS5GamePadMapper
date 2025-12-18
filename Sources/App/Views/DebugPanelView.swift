@@ -998,15 +998,15 @@ class DebugPanelViewModel: ObservableObject {
     // MARK: - Private Methods
     
     private func setupCallbacks() {
-        // Button input callback
-        controllerManager.onButtonInput = { [weak self] rawInput in
+        // Button input callback - use addButtonInputHandler to support multiple handlers
+        controllerManager.addButtonInputHandler(id: "DebugPanel") { [weak self] rawInput in
             Task { @MainActor in
                 self?.recordButtonInput(rawInput.button, isPressed: rawInput.isPressed)
             }
         }
         
-        // Axis input callback
-        controllerManager.onAxisInput = { [weak self] rawInput in
+        // Axis input callback - use addAxisInputHandler to support multiple handlers
+        controllerManager.addAxisInputHandler(id: "DebugPanel") { [weak self] rawInput in
             Task { @MainActor in
                 guard let self = self else { return }
                 let config = AxisConfig(deadzone: 0.1, sensitivity: 1.0, curve: .linear)

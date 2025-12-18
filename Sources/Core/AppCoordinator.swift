@@ -93,6 +93,8 @@ public final class AppCoordinator {
     
     /// Set up controller manager callbacks
     private func setupControllerCallbacks() {
+        NSLog("[DEBUG] AppCoordinator: 🔧 Setting up controller callbacks...")
+        
         // Handle controller connection
         controllerManager.onControllerConnected = { [weak self] controller in
             self?.handleControllerConnected(controller)
@@ -110,15 +112,19 @@ public final class AppCoordinator {
             self?.handleControllerReconnected(controller)
         }
         
-        // Handle button input
-        controllerManager.onButtonInput = { [weak self] rawInput in
-            self?.processButtonInput(rawInput)
+        // Handle button input - use addButtonInputHandler to support multiple handlers
+        // This is the primary handler for input processing pipeline
+        controllerManager.addButtonInputHandler(id: "AppCoordinator") { [unowned self] rawInput in
+            NSLog("[DEBUG] AppCoordinator: 🔔 Button input handler triggered!")
+            self.processButtonInput(rawInput)
         }
         
         // Handle axis input
-        controllerManager.onAxisInput = { [weak self] rawInput in
-            self?.processAxisInput(rawInput)
+        controllerManager.addAxisInputHandler(id: "AppCoordinator") { [unowned self] rawInput in
+            self.processAxisInput(rawInput)
         }
+        
+        NSLog("[DEBUG] AppCoordinator: ✅ Controller callbacks set up")
     }
     
     /// Set up profile manager callbacks
@@ -245,35 +251,47 @@ public final class AppCoordinator {
     
     /// Process raw button input through the pipeline
     private func processButtonInput(_ rawInput: RawButtonInput) {
-        print("[DEBUG] 📥 Button input received: \(rawInput.button.rawValue), pressed: \(rawInput.isPressed)")
+        NSLog("[DEBUG] AppCoordinator: 📥 Button input received: %@, pressed: %@", rawInput.button.rawValue, rawInput.isPressed ? "true" : "false")
         
         // Check if we can emit events
         guard permissionManager.canEmitEvents else {
-            print("[DEBUG] ⚠️ Cannot emit events - permission denied!")
+            NSLog("[DEBUG] AppCoordinator: ⚠️ Cannot emit events - accessibility permission denied! Status: %@", String(describing: permissionManager.accessibilityStatus))
             return
         }
         
         // Step 1: Process through InputProcessor
         let buttonEvent = inputProcessor.processButtonInput(rawInput)
-        print("[DEBUG] 🔄 Button event processed: \(buttonEvent.button.rawValue), state: \(buttonEvent.state)")
+        NSLog("[DEBUG] AppCoordinator: 🔄 Button event processed: %@, state: %@", buttonEvent.button.rawValue, String(describing: buttonEvent.state))
         
         // Notify debug panel
         onInputEvent?(.button(buttonEvent))
         
         // Check if profile is active
         if let profile = mappingEngine.activeProfile {
-            print("[DEBUG] 📋 Active profile: \(profile.name), mappings count: \(profile.mappings.count)")
+            NSLog("[DEBUG] AppCoordinator: 📋 Active profile: %@, mappings count: %d", profile.name, profile.mappings.count)
+            
+            // Log button mappings for this specific button
+            let buttonMappings = profile.mappings.filter { mapping in
+                if case .button(let buttonType) = mapping.input {
+                    return buttonType == rawInput.button
+                }
+                return false
+            }
+            NSLog("[DEBUG] AppCoordinator: 📋 Mappings for %@: %d", rawInput.button.rawValue, buttonMappings.count)
+            for mapping in buttonMappings {
+                NSLog("[DEBUG] AppCoordinator: 📋   -> trigger: %@, action: %@", String(describing: mapping.trigger), String(describing: mapping.action))
+            }
         } else {
-            print("[DEBUG] ⚠️ No active profile!")
+            NSLog("[DEBUG] AppCoordinator: ⚠️ No active profile!")
         }
         
         // Step 2: Get actions from MappingEngine
         let actions = mappingEngine.handleButtonEvent(buttonEvent)
-        print("[DEBUG] 🎯 Actions from mapping engine: \(actions.count)")
+        NSLog("[DEBUG] AppCoordinator: 🎯 Actions from mapping engine: %d", actions.count)
         
         // Step 3: Execute each action
         for action in actions {
-            print("[DEBUG] ▶️ Executing action: \(action)")
+            NSLog("[DEBUG] AppCoordinator: ▶️ Executing action: %@", String(describing: action))
             executeAction(action, triggerMode: getTriggerMode(for: buttonEvent))
         }
     }
