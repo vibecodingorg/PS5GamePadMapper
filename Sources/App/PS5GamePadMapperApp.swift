@@ -110,17 +110,15 @@ class AppState: ObservableObject {
         self.permissionManager = PermissionManager.shared
         self.permissionViewModel = PermissionStatusViewModel(permissionManager: permissionManager)
         
+        // 先检查当前权限状态
+        let currentStatus = permissionManager.checkAccessibilityPermission()
+        self.hasRequiredPermissions = (currentStatus == .granted)
+        
         // Set up continue callback
         permissionViewModel.onContinue = { [weak self] in
-            self?.hasRequiredPermissions = true
-            self?.startCoordinator()
-        }
-        
-        // Monitor permission changes
-        permissionManager.onAccessibilityStatusChanged = { [weak self] status in
-            Task { @MainActor in
-                self?.updatePermissionState()
-            }
+            guard let self = self else { return }
+            self.hasRequiredPermissions = true
+            self.startCoordinator()
         }
     }
     
@@ -142,7 +140,8 @@ class AppState: ObservableObject {
     private func updatePermissionState() {
         // Only require accessibility permission to proceed
         // Bluetooth is optional (USB controllers still work)
-        hasRequiredPermissions = permissionManager.accessibilityStatus == .granted
+        let status = permissionManager.checkAccessibilityPermission()
+        hasRequiredPermissions = (status == .granted)
     }
     
     /// Start the coordinator to begin processing inputs

@@ -40,7 +40,7 @@ public final class PermissionManager: NSObject, PermissionManagerProtocol {
     @discardableResult
     public func checkAccessibilityPermission() -> PermissionStatus {
         let trusted = AXIsProcessTrusted()
-        let newStatus: PermissionStatus = trusted ? .granted : .denied
+        let newStatus: PermissionStatus = trusted ? .granted : .notDetermined
         
         if newStatus != accessibilityStatus {
             accessibilityStatus = newStatus

@@ -208,6 +208,7 @@ class PermissionStatusViewModel: ObservableObject {
     var onContinue: (() -> Void)?
     
     private let permissionManager: PermissionManager
+    private var monitoringTimer: Timer?
     
     var accessibilityLimitationMessage: String {
         permissionManager.getLimitationMessage(for: .accessibility)
@@ -223,25 +224,28 @@ class PermissionStatusViewModel: ObservableObject {
     }
     
     func startMonitoring() {
-        permissionManager.onAccessibilityStatusChanged = { [weak self] status in
-            Task { @MainActor in
-                self?.accessibilityStatus = status
-            }
-        }
-        
-        permissionManager.onBluetoothStatusChanged = { [weak self] status in
-            Task { @MainActor in
-                self?.bluetoothStatus = status
-            }
-        }
-        
-        permissionManager.startMonitoringAccessibility()
         updateStatus()
+        
+        // 使用自己的定时器来轮询权限状态，避免覆盖其他回调
+        monitoringTimer?.invalidate()
+        monitoringTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStatus()
+            }
+        }
+    }
+    
+    func stopMonitoring() {
+        monitoringTimer?.invalidate()
+        monitoringTimer = nil
     }
     
     func requestAccessibilityPermission() {
         permissionManager.promptAccessibilityPermission()
-        updateStatus()
+        // 延迟检查，给系统时间处理
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.updateStatus()
+        }
     }
     
     func requestBluetoothPermission() {
@@ -250,8 +254,21 @@ class PermissionStatusViewModel: ObservableObject {
     }
     
     private func updateStatus() {
-        accessibilityStatus = permissionManager.checkAccessibilityPermission()
-        bluetoothStatus = permissionManager.checkBluetoothPermission()
+        let newAccessibilityStatus = permissionManager.checkAccessibilityPermission()
+        let newBluetoothStatus = permissionManager.checkBluetoothPermission()
+        
+        accessibilityStatus = newAccessibilityStatus
+        bluetoothStatus = newBluetoothStatus
+        
+        // 当辅助功能权限被授予时，自动触发继续
+        if newAccessibilityStatus == .granted {
+            stopMonitoring()
+            onContinue?()
+        }
+    }
+    
+    deinit {
+        monitoringTimer?.invalidate()
     }
 }
 
