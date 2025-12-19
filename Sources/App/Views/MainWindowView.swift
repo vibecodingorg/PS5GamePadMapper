@@ -10,6 +10,12 @@ class KeyableWindow: NSWindow {
     override var acceptsFirstResponder: Bool { true }
 }
 
+/// Wrapper to make StickType work with sheet(item:)
+struct StickTypeWrapper: Identifiable {
+    let stick: StickType
+    var id: String { stick.rawValue }
+}
+
 /// Main window view combining all UI components
 /// Requirements: 18.1, 18.2, 18.3, 18.4, 18.5
 /// Requirements: 3.1, 3.2, 3.4, 3.5 - Direction selector integration
@@ -20,9 +26,12 @@ struct MainWindowView: View {
     @State private var editingMacro: Macro?
     @State private var editingScript: Script?
     
-    // Direction selector state
-    @State private var showDirectionSelector = false
-    @State private var selectedStickForDirection: StickType?
+    // Direction selector state - use wrapper for sheet(item:)
+    @State private var directionSelectorStick: StickTypeWrapper?
+    
+    // Settings state
+    @State private var showSettings = false
+    @State private var keyRepeatInterval: Double = 16 // milliseconds
     
     // Window controller for macro editor
     @State private var macroEditorWindow: NSWindow?
@@ -61,8 +70,8 @@ struct MainWindowView: View {
                         axisValues: viewModel.axisValues,
                         configuredDirections: viewModel.configuredDirections,
                         onStickDirectionTapped: { stick in
-                            selectedStickForDirection = stick
-                            showDirectionSelector = true
+                            print("[MainWindowView] Stick tapped: \(stick)")
+                            directionSelectorStick = StickTypeWrapper(stick: stick)
                         }
                     )
                     .padding()
@@ -106,6 +115,13 @@ struct MainWindowView: View {
                     Label("调试面板", systemImage: "ladybug")
                 }
                 .help("查看输入事件和调试信息")
+                
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+                .help("配置应用设置")
             }
         }
         .onAppear {
@@ -135,25 +151,36 @@ struct MainWindowView: View {
             DebugPanelView()
                 .frame(minWidth: 500, minHeight: 400)
         }
-        .sheet(isPresented: $showDirectionSelector) {
-            if let stick = selectedStickForDirection {
-                DirectionSelectorView(
-                    stick: stick,
-                    currentX: viewModel.axisValues[stick == .left ? .leftStickX : .rightStickX] ?? 0,
-                    currentY: -(viewModel.axisValues[stick == .left ? .leftStickY : .rightStickY] ?? 0),
-                    configuredDirections: viewModel.configuredDirections[stick] ?? [],
-                    onDirectionSelected: { direction in
-                        // Create direction input and open mapping editor
-                        let directionInput = DirectionInput(stick: stick, direction: direction)
-                        viewModel.selectedInput = .direction(directionInput)
-                        showDirectionSelector = false
-                        showMappingEditor = true
-                    },
-                    onDismiss: {
-                        showDirectionSelector = false
-                    }
-                )
-            }
+        .sheet(item: $directionSelectorStick) { wrapper in
+            DirectionSelectorView(
+                stick: wrapper.stick,
+                currentX: viewModel.axisValues[wrapper.stick == .left ? .leftStickX : .rightStickX] ?? 0,
+                currentY: -(viewModel.axisValues[wrapper.stick == .left ? .leftStickY : .rightStickY] ?? 0),
+                configuredDirections: viewModel.configuredDirections[wrapper.stick] ?? [],
+                availableMacros: viewModel.selectedProfile?.macros ?? [],
+                availableScripts: viewModel.selectedProfile?.scripts ?? [],
+                directionMappings: viewModel.getDirectionMappings(for: wrapper.stick),
+                onMappingChanged: { direction, mapping in
+                    let input = InputSource.direction(DirectionInput(stick: wrapper.stick, direction: direction))
+                    viewModel.updateMapping(for: input, mapping: mapping)
+                },
+                onDismiss: {
+                    directionSelectorStick = nil
+                }
+            )
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(
+                keyRepeatInterval: $keyRepeatInterval,
+                onSave: {
+                    // Apply settings to EventEmitter
+                    viewModel.setKeyRepeatInterval(keyRepeatInterval)
+                    showSettings = false
+                },
+                onCancel: {
+                    showSettings = false
+                }
+            )
         }
     }
     
@@ -295,6 +322,23 @@ class MainWindowViewModel: ObservableObject {
         return result
     }
     
+    /// Get all direction mappings for a specific stick
+    func getDirectionMappings(for stick: StickType) -> [StickDirection: Mapping] {
+        guard let profile = selectedProfile else {
+            return [:]
+        }
+        
+        var result: [StickDirection: Mapping] = [:]
+        
+        for mapping in profile.mappings {
+            if case .direction(let dirInput) = mapping.input, dirInput.stick == stick {
+                result[dirInput.direction] = mapping
+            }
+        }
+        
+        return result
+    }
+    
     // MARK: - Initialization
     
     init(coordinator: AppCoordinator) {
@@ -322,6 +366,14 @@ class MainWindowViewModel: ObservableObject {
     
     func selectInput(_ input: InputSource) {
         selectedInput = input
+    }
+    
+    /// Set the key repeat interval for toggle mode
+    /// - Parameter interval: Interval in milliseconds
+    func setKeyRepeatInterval(_ intervalMs: Double) {
+        let intervalSeconds = intervalMs / 1000.0
+        coordinator.eventEmitter.setKeyRepeatInterval(intervalSeconds)
+        print("[MainWindowViewModel] Key repeat interval set to \(intervalMs)ms")
     }
     
     /// Create a new profile with the given name
@@ -471,8 +523,8 @@ class MainWindowViewModel: ObservableObject {
             }
         }
         
-        // Update UI when profile changes
-        coordinator.profileManager.onProfileDidChange = { [weak self] profile in
+        // Update UI when profile changes - use addProfileDidChangeHandler to avoid overwriting AppCoordinator's callback
+        coordinator.profileManager.addProfileDidChangeHandler(id: "MainWindowView") { [weak self] profile in
             Task { @MainActor in
                 guard let self = self else { return }
                 // Only update if the profile is different to avoid unnecessary re-renders

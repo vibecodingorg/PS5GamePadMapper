@@ -220,28 +220,14 @@ struct StickView: View {
             }
         }
         .onTapGesture {
-            // Single tap selects axis for axis mapping
-            selectedInput = .axis(axisX)
-            onInputSelected(.axis(axisX))
-        }
-        .onTapGesture(count: 2) {
-            // Double tap opens direction selector
+            // Single tap opens direction selector directly
             onDirectionTapped?(stickType)
-        }
-        .contextMenu {
-            Button("轴映射") {
-                selectedInput = .axis(axisX)
-                onInputSelected(.axis(axisX))
-            }
-            Button("方向映射") {
-                onDirectionTapped?(stickType)
-            }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 35)
                 .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
         )
-        .help("单击: 轴映射 | 双击/右键: 方向映射")
+        .help("点击配置8方向映射")
     }
 }
 

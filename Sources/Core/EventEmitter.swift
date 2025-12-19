@@ -18,8 +18,79 @@ public final class EventEmitter: EventEmitterProtocol {
     /// Whether to record events (for testing)
     public var recordEvents: Bool = false
     
+    /// Track keys that are being held down with repeat timers
+    private var heldKeyTimers: [UInt16: Timer] = [:]
+    
+    /// Interval for key repeat (in seconds) - configurable to avoid detection
+    /// Default: 0.016 (~60 Hz), can be adjusted via setKeyRepeatInterval
+    public private(set) var keyRepeatInterval: TimeInterval = 0.016
+    
+    /// Minimum allowed repeat interval (10ms = 100Hz)
+    public static let minRepeatInterval: TimeInterval = 0.010
+    
+    /// Maximum allowed repeat interval (200ms = 5Hz)
+    public static let maxRepeatInterval: TimeInterval = 0.200
+    
     public init() {
         self.eventSource = CGEventSource(stateID: .hidSystemState)
+    }
+    
+    // MARK: - Configuration
+    
+    /// Set the key repeat interval for toggle hold mode
+    /// - Parameter interval: Interval in seconds (clamped to 10ms - 200ms)
+    public func setKeyRepeatInterval(_ interval: TimeInterval) {
+        keyRepeatInterval = max(Self.minRepeatInterval, min(Self.maxRepeatInterval, interval))
+        print("[DEBUG] EventEmitter: ⚙️ Key repeat interval set to \(keyRepeatInterval * 1000)ms")
+    }
+    
+    // MARK: - Held Key Management
+    
+    /// Start holding a key down (with automatic repeat for games)
+    /// This will continuously send keyDown events until stopHoldingKey is called
+    public func startHoldingKey(_ keyCode: UInt16, modifiers: KeyModifiers) {
+        NSLog("[DEBUG] EventEmitter: 🔒 startHoldingKey - keyCode: %d, modifiers: %@, interval: %.1fms", keyCode, String(describing: modifiers), keyRepeatInterval * 1000)
+        
+        // Stop any existing timer for this key
+        stopHoldingKey(keyCode)
+        
+        // Emit initial key down
+        emitKeyDown(keyCode, modifiers: modifiers)
+        
+        // Start a timer to repeatedly send key down events
+        let interval = keyRepeatInterval
+        NSLog("[DEBUG] EventEmitter: ⏱️ Creating timer with interval: %.1fms", interval * 1000)
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            NSLog("[DEBUG] EventEmitter: 🔄 Timer fired - sending key repeat for keyCode: %d", keyCode)
+            self?.emitKeyEvent(keyCode: keyCode, keyDown: true, modifiers: modifiers)
+        }
+        heldKeyTimers[keyCode] = timer
+        RunLoop.main.add(timer, forMode: .common)
+        
+        NSLog("[DEBUG] EventEmitter: ✅ Key hold started with repeat timer, timer valid: %@", timer.isValid ? "true" : "false")
+    }
+    
+    /// Stop holding a key down
+    public func stopHoldingKey(_ keyCode: UInt16) {
+        if let timer = heldKeyTimers[keyCode] {
+            timer.invalidate()
+            heldKeyTimers.removeValue(forKey: keyCode)
+            print("[DEBUG] EventEmitter: 🔓 stopHoldingKey - keyCode: \(keyCode)")
+        }
+    }
+    
+    /// Check if a key is currently being held
+    public func isKeyHeld(_ keyCode: UInt16) -> Bool {
+        return heldKeyTimers[keyCode] != nil
+    }
+    
+    /// Stop all held keys
+    public func stopAllHeldKeys() {
+        for (keyCode, timer) in heldKeyTimers {
+            timer.invalidate()
+            print("[DEBUG] EventEmitter: 🔓 Stopped holding keyCode: \(keyCode)")
+        }
+        heldKeyTimers.removeAll()
     }
     
     // MARK: - Keyboard Events

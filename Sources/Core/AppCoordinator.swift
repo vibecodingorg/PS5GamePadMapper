@@ -55,6 +55,17 @@ public final class AppCoordinator {
     /// Callback for debug panel - macro state
     public var onMacroStateChanged: ((MacroStateInfo) -> Void)?
     
+    // MARK: - Hold Detection State
+    
+    /// Track button press timestamps for hold detection
+    private var buttonPressTimestamps: [ButtonType: Date] = [:]
+    
+    /// Track hold timers for each button
+    private var holdTimers: [ButtonType: Timer] = [:]
+    
+    /// Track which hold mappings have been triggered (to avoid re-triggering)
+    private var triggeredHoldMappings: [ButtonType: Set<UUID>] = [:]
+    
     // MARK: - Initialization
     
     public init() {
@@ -285,14 +296,126 @@ public final class AppCoordinator {
             NSLog("[DEBUG] AppCoordinator: ⚠️ No active profile!")
         }
         
-        // Step 2: Get actions from MappingEngine
-        let actions = mappingEngine.handleButtonEvent(buttonEvent)
-        NSLog("[DEBUG] AppCoordinator: 🎯 Actions from mapping engine: %d", actions.count)
+        // Handle hold detection for button press/release
+        if rawInput.isPressed {
+            handleButtonPressed(rawInput.button)
+        } else {
+            handleButtonReleased(rawInput.button)
+        }
+        
+        // Step 2: Get action results from MappingEngine (for press/release triggers)
+        let actionResults = mappingEngine.handleButtonEvent(buttonEvent)
+        NSLog("[DEBUG] AppCoordinator: 🎯 Actions from mapping engine: %d", actionResults.count)
         
         // Step 3: Execute each action
-        for action in actions {
-            NSLog("[DEBUG] AppCoordinator: ▶️ Executing action: %@", String(describing: action))
-            executeAction(action, triggerMode: getTriggerMode(for: buttonEvent))
+        for result in actionResults {
+            NSLog("[DEBUG] AppCoordinator: ▶️ Executing action: %@, isToggleHold: %@", String(describing: result.action), result.isToggleHold ? "true" : "false")
+            executeAction(result.action, triggerMode: getTriggerMode(for: buttonEvent), useHoldMode: result.isToggleHold)
+        }
+    }
+    
+    // MARK: - Hold Detection
+    
+    /// Handle button press - start hold detection timers
+    private func handleButtonPressed(_ button: ButtonType) {
+        // Record press timestamp
+        buttonPressTimestamps[button] = Date()
+        
+        // Clear any previously triggered hold mappings for this button
+        triggeredHoldMappings[button] = []
+        
+        // Cancel any existing timer for this button
+        holdTimers[button]?.invalidate()
+        holdTimers[button] = nil
+        
+        // Find hold mappings for this button
+        guard let profile = mappingEngine.activeProfile else { return }
+        
+        let holdMappings = profile.mappings.filter { mapping in
+            guard case .button(let buttonType) = mapping.input,
+                  buttonType == button,
+                  case .hold = mapping.trigger else {
+                return false
+            }
+            return true
+        }
+        
+        guard !holdMappings.isEmpty else { return }
+        
+        // Find the minimum hold threshold to start checking
+        let minThreshold = holdMappings.compactMap { mapping -> TimeInterval? in
+            if case .hold(let threshold) = mapping.trigger {
+                return threshold
+            }
+            return nil
+        }.min() ?? 0.5
+        
+        NSLog("[DEBUG] AppCoordinator: ⏱️ Starting hold timer for %@ with min threshold %.2fs", button.rawValue, minThreshold)
+        
+        // Start a timer to check for hold triggers
+        // Use a repeating timer to check multiple thresholds
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] timer in
+            self?.checkHoldTriggers(for: button)
+        }
+        holdTimers[button] = timer
+        
+        // Also schedule on the main run loop to ensure it fires
+        RunLoop.main.add(timer, forMode: .common)
+    }
+    
+    /// Handle button release - cancel hold detection timers
+    private func handleButtonReleased(_ button: ButtonType) {
+        // Cancel hold timer
+        holdTimers[button]?.invalidate()
+        holdTimers[button] = nil
+        
+        // Clear press timestamp
+        buttonPressTimestamps.removeValue(forKey: button)
+        
+        // Clear triggered hold mappings
+        triggeredHoldMappings.removeValue(forKey: button)
+        
+        NSLog("[DEBUG] AppCoordinator: ⏱️ Cancelled hold timer for %@", button.rawValue)
+    }
+    
+    /// Check if any hold triggers should fire
+    private func checkHoldTriggers(for button: ButtonType) {
+        guard let pressTime = buttonPressTimestamps[button],
+              let profile = mappingEngine.activeProfile else {
+            // Button was released or no profile, cancel timer
+            holdTimers[button]?.invalidate()
+            holdTimers[button] = nil
+            return
+        }
+        
+        let holdDuration = Date().timeIntervalSince(pressTime)
+        
+        // Find hold mappings that should trigger
+        let holdMappings = profile.mappings.filter { mapping in
+            guard case .button(let buttonType) = mapping.input,
+                  buttonType == button,
+                  case .hold(let threshold) = mapping.trigger else {
+                return false
+            }
+            
+            // Check if this mapping should trigger
+            // Only trigger if duration >= threshold and not already triggered
+            let alreadyTriggered = triggeredHoldMappings[button]?.contains(mapping.id) ?? false
+            return holdDuration >= threshold && !alreadyTriggered
+        }
+        
+        // Execute actions for triggered hold mappings
+        for mapping in holdMappings {
+            NSLog("[DEBUG] AppCoordinator: ⏱️ Hold trigger fired for %@ after %.2fs", button.rawValue, holdDuration)
+            
+            // Mark as triggered
+            if triggeredHoldMappings[button] == nil {
+                triggeredHoldMappings[button] = []
+            }
+            triggeredHoldMappings[button]?.insert(mapping.id)
+            
+            // Execute the action
+            executeAction(mapping.action, triggerMode: mapping.trigger)
         }
     }
     
@@ -349,15 +472,26 @@ public final class AppCoordinator {
     // MARK: - Action Execution
     
     /// Execute a single action
-    private func executeAction(_ action: Action, triggerMode: TriggerMode) {
+    /// - Parameters:
+    ///   - action: The action to execute
+    ///   - triggerMode: The trigger mode that caused this action
+    ///   - useHoldMode: If true, use continuous key holding (for toggle mode)
+    private func executeAction(_ action: Action, triggerMode: TriggerMode, useHoldMode: Bool = false) {
         // Notify debug panel
         onActionExecuted?(action)
         
         switch action {
         case .keyPress(let keyAction):
-            eventEmitter.emitKeyDown(keyAction.keyCode, modifiers: keyAction.modifiers)
+            if useHoldMode {
+                // For toggle mode, use continuous key holding
+                eventEmitter.startHoldingKey(keyAction.keyCode, modifiers: keyAction.modifiers)
+            } else {
+                eventEmitter.emitKeyDown(keyAction.keyCode, modifiers: keyAction.modifiers)
+            }
             
         case .keyRelease(let keyAction):
+            // Stop holding if it was being held
+            eventEmitter.stopHoldingKey(keyAction.keyCode)
             eventEmitter.emitKeyUp(keyAction.keyCode, modifiers: keyAction.modifiers)
             
         case .mouseButton(let mouseAction):

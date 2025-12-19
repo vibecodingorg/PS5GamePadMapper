@@ -36,6 +36,23 @@ public final class ProfileManager: ProfileManagerProtocol {
     /// Callback when active profile has changed
     public var onProfileDidChange: ((Profile?) -> Void)?
     
+    /// Multiple handlers for profile changes (supports multiple subscribers)
+    private var profileDidChangeHandlers: [String: (Profile?) -> Void] = [:]
+    
+    /// Add a handler for profile changes
+    /// - Parameters:
+    ///   - id: Unique identifier for the handler
+    ///   - handler: Callback to invoke when profile changes
+    public func addProfileDidChangeHandler(id: String, handler: @escaping (Profile?) -> Void) {
+        profileDidChangeHandlers[id] = handler
+    }
+    
+    /// Remove a handler for profile changes
+    /// - Parameter id: Unique identifier of the handler to remove
+    public func removeProfileDidChangeHandler(id: String) {
+        profileDidChangeHandlers.removeValue(forKey: id)
+    }
+    
     // MARK: - Initialization
     
     /// Initialize with a custom profiles directory
@@ -191,8 +208,13 @@ public final class ProfileManager: ProfileManagerProtocol {
         // Set the new active profile
         activeProfile = profile
         
-        // Notify that profile has changed
+        // Notify that profile has changed (legacy single callback)
         onProfileDidChange?(profile)
+        
+        // Notify all registered handlers
+        for (_, handler) in profileDidChangeHandlers {
+            handler(profile)
+        }
     }
     
     // MARK: - Additional Methods

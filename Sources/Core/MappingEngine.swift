@@ -77,13 +77,13 @@ public final class MappingEngine: MappingEngineProtocol {
     /// Handle a button event and return resulting actions
     /// Requirements: 4.5 - Support Press, Release, and Hold trigger types
     /// Requirements: 5.2, 5.3, 5.4 - Mouse button and scroll mapping
-    public func handleButtonEvent(_ event: ButtonEvent) -> [Action] {
+    public func handleButtonEvent(_ event: ButtonEvent) -> [ActionResult] {
         guard let profile = activeProfile else {
             print("[DEBUG] MappingEngine: No active profile")
             return []
         }
         
-        var actions: [Action] = []
+        var results: [ActionResult] = []
         
         // Find all mappings for this button
         let buttonMappings = profile.mappings.filter { mapping in
@@ -97,15 +97,48 @@ public final class MappingEngine: MappingEngineProtocol {
         
         for mapping in buttonMappings {
             print("[DEBUG] MappingEngine: Checking mapping - trigger: \(mapping.trigger), action: \(mapping.action)")
+            
+            // Special handling for toggle mode
+            if case .toggle = mapping.trigger {
+                if case .pressed = event.state {
+                    // Toggle the state
+                    let currentState = toggleStates[event.button] ?? false
+                    let newState = !currentState
+                    toggleStates[event.button] = newState
+                    
+                    print("[DEBUG] MappingEngine: 🔄 Toggle state changed: \(currentState) -> \(newState)")
+                    
+                    // For key actions, send keyDown when toggling ON, keyUp when toggling OFF
+                    if case .keyPress(let keyAction) = mapping.action {
+                        if newState {
+                            // Toggling ON - send keyDown (key stays pressed with repeat)
+                            print("[DEBUG] MappingEngine: ✅ Toggle ON - sending keyPress (hold)")
+                            results.append(ActionResult(action: .keyPress(keyAction), isToggleHold: true))
+                        } else {
+                            // Toggling OFF - send keyUp (release key)
+                            print("[DEBUG] MappingEngine: ✅ Toggle OFF - sending keyRelease")
+                            results.append(ActionResult(action: .keyRelease(keyAction), isToggleHold: false))
+                        }
+                    } else {
+                        // For non-key actions, just execute on toggle ON
+                        if newState {
+                            results.append(ActionResult(action: mapping.action, isToggleHold: false))
+                        }
+                    }
+                }
+                continue
+            }
+            
+            // Normal trigger evaluation for non-toggle modes
             if evaluateTrigger(mapping.trigger, for: event, button: event.button) != nil {
                 print("[DEBUG] MappingEngine: ✅ Trigger matched! Adding action: \(mapping.action)")
-                actions.append(mapping.action)
+                results.append(ActionResult(action: mapping.action, isToggleHold: false))
             } else {
                 print("[DEBUG] MappingEngine: ❌ Trigger not matched for event state: \(event.state)")
             }
         }
         
-        return actions
+        return results
     }
     
     /// Handle an axis event and return resulting actions
@@ -319,14 +352,10 @@ public final class MappingEngine: MappingEngineProtocol {
             }
             
         case .toggle:
-            // Toggle state on press
+            // Toggle state on press - handled specially, always return true on press
+            // The actual toggle logic (keyDown vs keyUp) is handled in handleButtonEvent
             if case .pressed = event.state {
-                let currentState = toggleStates[button] ?? false
-                toggleStates[button] = !currentState
-                // Only trigger action when toggling ON
-                if !currentState {
-                    return true
-                }
+                return true
             }
         }
         
@@ -413,6 +442,18 @@ public final class MappingEngine: MappingEngineProtocol {
 }
 
 // MARK: - Supporting Types
+
+/// Result of processing a button event, includes the action and whether it should use hold mode
+public struct ActionResult {
+    public let action: Action
+    /// If true, the key should be held down continuously (for toggle mode)
+    public let isToggleHold: Bool
+    
+    public init(action: Action, isToggleHold: Bool) {
+        self.action = action
+        self.isToggleHold = isToggleHold
+    }
+}
 
 /// Tracks the current key press state for axis-to-key mapping
 public struct AxisKeyState: Equatable {
