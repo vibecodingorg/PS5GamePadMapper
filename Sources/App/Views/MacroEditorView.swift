@@ -585,53 +585,99 @@ class MacroRecorder: ObservableObject {
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
     
+    /// Track currently pressed keys to properly record keyUp events
+    private var pressedKeys: Set<UInt16> = []
+    
+    /// Session ID for debugging
+    private var sessionId: Int = 0
+    
     func startRecording() {
-        guard !isRecording else { return }
+        // Always clean up any existing monitors first
+        cleanupMonitors()
+        
+        sessionId += 1
+        NSLog("[MacroRecorder] 🎬 Starting recording session #%d...", sessionId)
         
         isRecording = true
         lastEventTime = Date()
+        pressedKeys.removeAll()
         
-        // Local monitor for keyboard events only (let mouse events pass through for UI interaction)
-        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+        // Local monitor for keyboard events (when app is active)
+        // Monitor both keyDown and keyUp to track key states
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self = self else { return event }
+            let sid = self.sessionId
+            NSLog("[MacroRecorder] 📥 [Session #%d] LOCAL event: type=%@, keyCode=%d, isARepeat=%@",
+                  sid,
+                  event.type == .keyDown ? "keyDown" : "keyUp",
+                  event.keyCode,
+                  event.isARepeat ? "YES" : "NO")
+            
             Task { @MainActor in
-                self?.handleEvent(event)
+                self.handleEvent(event)
             }
             // Consume keyboard events so they don't go to text fields
             return nil
         }
+        NSLog("[MacroRecorder] ✅ Local event monitor installed (keyDown + keyUp)")
         
         // Global monitor for all events when app is not active
-        let globalEventMask: NSEvent.EventTypeMask = [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        let globalEventMask: NSEvent.EventTypeMask = [.keyDown, .keyUp, .leftMouseDown, .rightMouseDown, .otherMouseDown]
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: globalEventMask) { [weak self] event in
+            guard let self = self else { return }
+            let sid = self.sessionId
+            NSLog("[MacroRecorder] 📥 [Session #%d] GLOBAL event: type=%@, keyCode=%d, isARepeat=%@",
+                  sid,
+                  String(describing: event.type),
+                  event.keyCode,
+                  event.isARepeat ? "YES" : "NO")
+            
             Task { @MainActor in
-                self?.handleEvent(event)
+                self.handleEvent(event)
             }
         }
+        NSLog("[MacroRecorder] ✅ Global event monitor installed (keyDown + keyUp + mouse buttons)")
+        NSLog("[MacroRecorder] 🎬 Recording session #%d started!", sessionId)
     }
     
     func stopRecording() {
-        guard isRecording else { return }
+        guard isRecording else { 
+            NSLog("[MacroRecorder] ⚠️ Not recording, ignoring stop request")
+            return 
+        }
         
+        NSLog("[MacroRecorder] 🛑 Stopping recording session #%d...", sessionId)
         isRecording = false
         lastEventTime = nil
+        pressedKeys.removeAll()
         
+        cleanupMonitors()
+        
+        NSLog("[MacroRecorder] 🛑 Recording session #%d stopped! Total steps recorded: %d", sessionId, steps.count)
+    }
+    
+    private func cleanupMonitors() {
         if let monitor = localEventMonitor {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
+            NSLog("[MacroRecorder] ✅ Local event monitor removed")
         }
         
         if let monitor = globalEventMonitor {
             NSEvent.removeMonitor(monitor)
             globalEventMonitor = nil
+            NSLog("[MacroRecorder] ✅ Global event monitor removed")
         }
     }
     
     func clearSteps() {
         steps.removeAll()
+        NSLog("[MacroRecorder] 🗑️ Steps cleared")
     }
     
     func loadSteps(_ existingSteps: [MacroStep]) {
         steps = existingSteps
+        NSLog("[MacroRecorder] 📂 Loaded %d existing steps", existingSteps.count)
     }
     
     func updateDelay(at index: Int, milliseconds: Int) {
@@ -647,30 +693,89 @@ class MacroRecorder: ObservableObject {
     }
     
     private func handleEvent(_ event: NSEvent) {
+        guard isRecording else {
+            NSLog("[MacroRecorder] ⚠️ Event received but not recording, ignoring")
+            return
+        }
+        
+        let now = Date()
+        let sid = sessionId
+        
+        // Log all event details
+        NSLog("[MacroRecorder] 🔍 [Session #%d] Processing event: type=%@, keyCode=%d, isARepeat=%@, modifiers=0x%lx, pressedKeys=%@",
+              sid,
+              String(describing: event.type),
+              event.keyCode,
+              event.isARepeat ? "YES" : "NO",
+              event.modifierFlags.rawValue,
+              String(describing: pressedKeys))
+        
+        // Calculate and add delay if needed
         if let lastTime = lastEventTime {
-            let delay = Int(Date().timeIntervalSince(lastTime) * 1000)
+            let delay = Int(now.timeIntervalSince(lastTime) * 1000)
+            NSLog("[MacroRecorder] ⏱️ [Session #%d] Time since last event: %dms", sid, delay)
             if delay > 10 {
                 steps.append(.delay(milliseconds: delay))
+                NSLog("[MacroRecorder] ➕ [Session #%d] Added delay step: %dms", sid, delay)
             }
         }
-        lastEventTime = Date()
+        lastEventTime = now
         
         switch event.type {
         case .keyDown:
             let modifierOnlyKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
-            if !modifierOnlyKeyCodes.contains(event.keyCode) {
-                steps.append(.keyDown(keyCode: event.keyCode))
-                steps.append(.keyUp(keyCode: event.keyCode))
+            if modifierOnlyKeyCodes.contains(event.keyCode) {
+                NSLog("[MacroRecorder] ⏭️ [Session #%d] Skipping modifier-only key: %d", sid, event.keyCode)
+                return
             }
+            
+            // Record all keyDown events (including repeats for turbo-like behavior)
+            steps.append(.keyDown(keyCode: event.keyCode))
+            pressedKeys.insert(event.keyCode)
+            
+            let keyName = KeyCodeHelper.keyName(for: event.keyCode)
+            if event.isARepeat {
+                NSLog("[MacroRecorder] ➕ [Session #%d] Added keyDown (REPEAT) for keyCode: %d (%@)", sid, event.keyCode, keyName)
+            } else {
+                NSLog("[MacroRecorder] ➕ [Session #%d] Added keyDown for keyCode: %d (%@)", sid, event.keyCode, keyName)
+            }
+            
+        case .keyUp:
+            let modifierOnlyKeyCodes: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
+            if modifierOnlyKeyCodes.contains(event.keyCode) {
+                NSLog("[MacroRecorder] ⏭️ [Session #%d] Skipping modifier-only keyUp: %d", sid, event.keyCode)
+                return
+            }
+            
+            steps.append(.keyUp(keyCode: event.keyCode))
+            pressedKeys.remove(event.keyCode)
+            
+            let keyName = KeyCodeHelper.keyName(for: event.keyCode)
+            NSLog("[MacroRecorder] ➕ [Session #%d] Added keyUp for keyCode: %d (%@)", sid, event.keyCode, keyName)
+            
         case .leftMouseDown:
             steps.append(.mouseClick(button: .left))
+            NSLog("[MacroRecorder] ➕ [Session #%d] Added left mouse click", sid)
+            
         case .rightMouseDown:
             steps.append(.mouseClick(button: .right))
+            NSLog("[MacroRecorder] ➕ [Session #%d] Added right mouse click", sid)
+            
         case .otherMouseDown:
             steps.append(.mouseClick(button: .middle))
+            NSLog("[MacroRecorder] ➕ [Session #%d] Added middle mouse click", sid)
+            
         default:
-            break
+            NSLog("[MacroRecorder] ⏭️ [Session #%d] Ignoring event type: %@", sid, String(describing: event.type))
         }
+        
+        NSLog("[MacroRecorder] 📊 [Session #%d] Total steps: %d, pressedKeys: %@", sid, steps.count, String(describing: pressedKeys))
+    }
+    
+    deinit {
+        // Note: This won't be called on MainActor, but we need to clean up
+        // The monitors should already be cleaned up by stopRecording()
+        NSLog("[MacroRecorder] 💀 MacroRecorder deinit")
     }
 }
 

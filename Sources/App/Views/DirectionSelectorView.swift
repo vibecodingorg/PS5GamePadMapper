@@ -16,6 +16,12 @@ struct DirectionSelectorView: View {
 
     // Selected direction for editing
     @State private var selectedDirection: StickDirection?
+    
+    // Local copy of direction mappings to track changes within this view
+    @State private var localMappings: [StickDirection: Mapping] = [:]
+    
+    // Track which directions have been configured locally
+    @State private var localConfiguredDirections: Set<StickDirection> = []
 
     // Size constants
     private let outerRadius: CGFloat = 100
@@ -35,6 +41,14 @@ struct DirectionSelectorView: View {
                 .frame(minWidth: 300, maxWidth: 350)
         }
         .frame(width: 620, height: 450)
+        .onAppear {
+            // Initialize local state from passed-in mappings
+            localMappings = directionMappings
+            localConfiguredDirections = configuredDirections
+            NSLog("[DirectionSelectorView] Initialized with %d mappings, configured: %@", 
+                  directionMappings.count, 
+                  String(describing: configuredDirections))
+        }
     }
 
     // MARK: - Direction Wheel Section
@@ -67,7 +81,7 @@ struct DirectionSelectorView: View {
                         direction: direction,
                         outerRadius: outerRadius,
                         innerRadius: innerRadius,
-                        isConfigured: configuredDirections.contains(direction),
+                        isConfigured: localConfiguredDirections.contains(direction),
                         isActive: isDirectionActive(direction),
                         isSelected: selectedDirection == direction
                     )
@@ -141,10 +155,23 @@ struct DirectionSelectorView: View {
                 DirectionMappingEditor(
                     stick: stick,
                     direction: direction,
-                    currentMapping: directionMappings[direction],
+                    currentMapping: localMappings[direction],
                     availableMacros: availableMacros,
                     availableScripts: availableScripts,
                     onMappingChanged: { mapping in
+                        // Update local state immediately
+                        if let mapping = mapping {
+                            localMappings[direction] = mapping
+                            localConfiguredDirections.insert(direction)
+                            NSLog("[DirectionSelectorView] Updated local mapping for %@, total mappings: %d", 
+                                  String(describing: direction), localMappings.count)
+                        } else {
+                            localMappings.removeValue(forKey: direction)
+                            localConfiguredDirections.remove(direction)
+                            NSLog("[DirectionSelectorView] Removed local mapping for %@", 
+                                  String(describing: direction))
+                        }
+                        // Also notify parent to persist the change
                         onMappingChanged(direction, mapping)
                     }
                 )
@@ -293,10 +320,23 @@ struct DirectionMappingEditor: View {
             .padding()
         }
         .onAppear {
+            NSLog("[DirectionMappingEditor] onAppear for direction: %@, hasMapping: %@", 
+                  String(describing: direction), 
+                  currentMapping != nil ? "YES" : "NO")
             loadCurrentMapping()
         }
-        .onChange(of: direction) { _ in
+        .onChange(of: direction) { newDirection in
+            NSLog("[DirectionMappingEditor] direction changed to: %@, hasMapping: %@", 
+                  String(describing: newDirection), 
+                  currentMapping != nil ? "YES" : "NO")
             loadCurrentMapping()
+        }
+        .onChange(of: currentMapping) { newMapping in
+            NSLog("[DirectionMappingEditor] currentMapping changed for direction: %@, hasMapping: %@", 
+                  String(describing: direction), 
+                  newMapping != nil ? "YES" : "NO")
+            // Only reload if the mapping actually changed from external source
+            // This prevents overwriting user's current edits
         }
     }
 
@@ -401,8 +441,11 @@ struct DirectionMappingEditor: View {
     }
 
     private func loadCurrentMapping() {
+        NSLog("[DirectionMappingEditor] loadCurrentMapping called for direction: %@", String(describing: direction))
+        
         guard let mapping = currentMapping else {
             // Reset to defaults
+            NSLog("[DirectionMappingEditor] No mapping found, resetting to defaults")
             selectedCategory = .key
             keyCode = 49
             keyModifiers = []
@@ -412,26 +455,36 @@ struct DirectionMappingEditor: View {
             return
         }
 
+        NSLog("[DirectionMappingEditor] Loading mapping with action: %@", String(describing: mapping.action))
+        
         switch mapping.action {
         case .keyPress(let keyAction), .keyRelease(let keyAction):
             selectedCategory = .key
             keyCode = keyAction.keyCode
             keyModifiers = keyAction.modifiers
+            NSLog("[DirectionMappingEditor] Loaded key action: keyCode=%d, modifiers=%@", 
+                  keyCode, String(describing: keyModifiers))
 
         case .mouseButton(let mouseAction):
             selectedCategory = .mouse
             mouseButton = mouseAction.button
+            NSLog("[DirectionMappingEditor] Loaded mouse action: button=%@", String(describing: mouseButton))
 
         case .macro(let macro):
             selectedCategory = .macro
             selectedMacroId = macro.id
+            NSLog("[DirectionMappingEditor] Loaded macro action: id=%@, name=%@", 
+                  macro.id.uuidString, macro.name)
 
         case .script(let script):
             selectedCategory = .script
             selectedScriptId = script.id
+            NSLog("[DirectionMappingEditor] Loaded script action: id=%@, name=%@", 
+                  script.id.uuidString, script.name)
 
         default:
             selectedCategory = .key
+            NSLog("[DirectionMappingEditor] Unknown action type, defaulting to key")
         }
     }
 
