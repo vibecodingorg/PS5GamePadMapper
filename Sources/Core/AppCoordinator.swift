@@ -453,6 +453,34 @@ public final class AppCoordinator {
         // Step 3: Execute each action
         for action in actions {
             print("[DEBUG] ▶️ Executing axis action: \(action)")
+            executeAxisAction(action, axisEvent: axisEvent)
+        }
+    }
+    
+    /// Execute an axis-triggered action with the axis event context
+    /// Requirements: 4.5 - Mouse movement proportional to stick deflection
+    /// Requirements: 4.6 - Deadzone filtering (handled by InputProcessor)
+    private func executeAxisAction(_ action: Action, axisEvent: AxisEvent) {
+        // Notify debug panel
+        onActionExecuted?(action)
+        
+        switch action {
+        case .mouseMove(let moveAction):
+            // Requirements: 4.5 - Emit mouse movement proportional to stick deflection
+            // The axisEvent.normalizedValue already has deadzone applied by InputProcessor
+            // Requirements: 4.6 - If value is 0 (within deadzone), no movement is emitted
+            let movement = axisEvent.normalizedValue * moveAction.sensitivity
+            
+            // Determine if this is X or Y axis movement
+            if axisEvent.axis == .leftStickX || axisEvent.axis == .rightStickX {
+                eventEmitter.emitMouseMove(dx: CGFloat(movement), dy: 0)
+            } else if axisEvent.axis == .leftStickY || axisEvent.axis == .rightStickY {
+                // Y axis is inverted (stick up = negative raw value, but should move cursor up = negative dy)
+                eventEmitter.emitMouseMove(dx: 0, dy: CGFloat(movement))
+            }
+            
+        default:
+            // For non-mouse-move actions, use the standard execution
             executeAction(action, triggerMode: .press)
         }
     }

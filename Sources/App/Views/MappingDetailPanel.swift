@@ -3,9 +3,18 @@ import PS5GamePadMapperCore
 
 /// Panel displaying details of the selected input mapping
 /// Requirements: 18.4 - Display input name, type, action, trigger mode
+/// Requirements: 1.2, 2.1, 2.2, 2.3 - Display stick mapping configuration
 struct MappingDetailPanel: View {
     let selectedInput: InputSource?
     let mapping: Mapping?
+    
+    // Stick-specific data for StickMappingDetailView integration
+    // Requirements: 2.1, 2.2, 2.3 - Display stick mapping details
+    var directionMappings: [StickDirection: Mapping] = [:]
+    var mouseConfig: MouseMoveAction? = nil
+    var stickMode: StickMappingMode? = nil
+    var onDirectionTapped: ((StickDirection) -> Void)? = nil
+    var onEditTapped: (() -> Void)? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -21,11 +30,24 @@ struct MappingDetailPanel: View {
                 
                 Divider()
                 
-                // Mapping information
-                if let mapping = mapping {
-                    MappingInfoSection(mapping: mapping)
+                // Check if this is a stick input - show StickMappingDetailView
+                // Requirements: 1.2 - Display stick's current mapping configuration
+                if case .stick(let stickType) = input {
+                    StickMappingDetailView(
+                        stick: stickType,
+                        directionMappings: directionMappings,
+                        mouseConfig: mouseConfig,
+                        onDirectionTapped: onDirectionTapped ?? { _ in },
+                        onEditTapped: onEditTapped ?? {},
+                        stickMode: stickMode
+                    )
                 } else {
-                    NoMappingView()
+                    // Regular mapping information for non-stick inputs
+                    if let mapping = mapping {
+                        MappingInfoSection(mapping: mapping)
+                    } else {
+                        NoMappingView()
+                    }
                 }
             } else {
                 NoSelectionView()
@@ -71,6 +93,8 @@ struct InputInfoSection: View {
             return axisType.displayName
         case .direction(let directionInput):
             return "\(directionInput.stick.displayName) \(directionInput.direction.displayName)"
+        case .stick(let stickType):
+            return stickType.displayName
         }
     }
     
@@ -82,6 +106,8 @@ struct InputInfoSection: View {
             return axisType.isTrigger ? "扳机" : "摇杆"
         case .direction:
             return "方向"
+        case .stick:
+            return "摇杆"
         }
     }
     
@@ -93,6 +119,8 @@ struct InputInfoSection: View {
             return axisType.isTrigger ? "slider.horizontal.3" : "circle.circle"
         case .direction:
             return "arrow.up.left.and.arrow.down.right"
+        case .stick:
+            return "circle.circle"
         }
     }
 }

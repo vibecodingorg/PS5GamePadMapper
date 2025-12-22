@@ -108,7 +108,8 @@ extension InputSource: Arbitrary {
         Gen.one(of: [
             ButtonType.arbitrary.map { InputSource.button($0) },
             AxisType.arbitrary.map { InputSource.axis($0) },
-            DirectionInput.arbitrary.map { InputSource.direction($0) }
+            DirectionInput.arbitrary.map { InputSource.direction($0) },
+            StickType.arbitrary.map { InputSource.stick($0) }
         ])
     }
 }
@@ -158,6 +159,14 @@ extension ApplicationBinding: Arbitrary {
     }
 }
 
+// MARK: - StickMappingMode Generator
+
+extension StickMappingMode: Arbitrary {
+    public static var arbitrary: Gen<StickMappingMode> {
+        Gen.fromElements(of: [.direction, .mouse])
+    }
+}
+
 // MARK: - Profile Generator (simplified for fast execution)
 
 extension Profile: Arbitrary {
@@ -189,13 +198,27 @@ extension Profile: Arbitrary {
                 bindings = [c.generate()]
             }
             
+            // Generate optional stickModes
+            let hasStickModes: Bool = c.generate()
+            var stickModes: [StickType: StickMappingMode]? = nil
+            if hasStickModes {
+                stickModes = [:]
+                for stick in StickType.allCases {
+                    let hasMode: Bool = c.generate()
+                    if hasMode {
+                        stickModes?[stick] = c.generate()
+                    }
+                }
+            }
+            
             return Profile(
                 id: UUID(),
                 name: c.generate(using: Gen.fromElements(of: ["Profile1", "Test", "Game", "Default"])),
                 mappings: mappings,
                 macros: macros,
                 scripts: scripts,
-                applicationBindings: bindings
+                applicationBindings: bindings,
+                stickModes: stickModes
             )
         }
     }

@@ -13,6 +13,14 @@ struct DirectionSelectorView: View {
     let directionMappings: [StickDirection: Mapping]
     let onMappingChanged: (StickDirection, Mapping?) -> Void
     let onDismiss: () -> Void
+    
+    /// Preselected direction when opening from direction list
+    /// Requirements: 6.9 - Open direction editor with pre-selected direction
+    var preselectedDirection: StickDirection?
+    
+    /// Whether to show dismiss controls (close button and confirm button)
+    /// Set to false when embedded in another view that handles dismissal
+    var showDismissControls: Bool = true
 
     // Selected direction for editing
     @State private var selectedDirection: StickDirection?
@@ -40,11 +48,20 @@ struct DirectionSelectorView: View {
             mappingConfigSection
                 .frame(minWidth: 300, maxWidth: 350)
         }
-        .frame(width: 620, height: 450)
+        .frame(width: 620, height: showDismissControls ? 450 : nil)
         .onAppear {
             // Initialize local state from passed-in mappings
             localMappings = directionMappings
             localConfiguredDirections = configuredDirections
+            
+            // Auto-select preselected direction if provided
+            // Requirements: 6.9 - Open direction editor with pre-selected direction
+            if let preselected = preselectedDirection {
+                selectedDirection = preselected
+                NSLog("[DirectionSelectorView] Auto-selected preselected direction: %@", 
+                      String(describing: preselected))
+            }
+            
             NSLog("[DirectionSelectorView] Initialized with %d mappings, configured: %@", 
                   directionMappings.count, 
                   String(describing: configuredDirections))
@@ -60,11 +77,13 @@ struct DirectionSelectorView: View {
                 Text(stick == .left ? "左摇杆方向" : "右摇杆方向")
                     .font(.headline)
                 Spacer()
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
+                if showDismissControls {
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal)
 
@@ -141,8 +160,19 @@ struct DirectionSelectorView: View {
             Text("点击方向区域配置映射")
                 .font(.caption)
                 .foregroundColor(.secondary)
-
-            Spacer()
+            
+            // Confirm button (only show when not embedded)
+            if showDismissControls {
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("确定")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.top, 8)
+            }
         }
         .padding()
     }
@@ -175,6 +205,8 @@ struct DirectionSelectorView: View {
                         onMappingChanged(direction, mapping)
                     }
                 )
+                // Force view recreation when direction changes to avoid state confusion
+                .id(direction)
             } else {
                 // No direction selected
                 VStack(spacing: 12) {
@@ -324,19 +356,6 @@ struct DirectionMappingEditor: View {
                   String(describing: direction), 
                   currentMapping != nil ? "YES" : "NO")
             loadCurrentMapping()
-        }
-        .onChange(of: direction) { newDirection in
-            NSLog("[DirectionMappingEditor] direction changed to: %@, hasMapping: %@", 
-                  String(describing: newDirection), 
-                  currentMapping != nil ? "YES" : "NO")
-            loadCurrentMapping()
-        }
-        .onChange(of: currentMapping) { newMapping in
-            NSLog("[DirectionMappingEditor] currentMapping changed for direction: %@, hasMapping: %@", 
-                  String(describing: direction), 
-                  newMapping != nil ? "YES" : "NO")
-            // Only reload if the mapping actually changed from external source
-            // This prevents overwriting user's current edits
         }
     }
 
@@ -633,23 +652,6 @@ struct LegendItem: View {
                 .fill(color)
                 .frame(width: 10, height: 10)
             Text(label)
-        }
-    }
-}
-
-// MARK: - StickDirection Extensions
-
-extension StickDirection {
-    var shortLabel: String {
-        switch self {
-        case .up: return "↑"
-        case .down: return "↓"
-        case .left: return "←"
-        case .right: return "→"
-        case .upLeft: return "↖"
-        case .upRight: return "↗"
-        case .downLeft: return "↙"
-        case .downRight: return "↘"
         }
     }
 }

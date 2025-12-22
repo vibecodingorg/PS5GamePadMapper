@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 /// Errors that can occur during profile management
 public enum ProfileManagerError: Error, Equatable {
@@ -7,6 +8,20 @@ public enum ProfileManagerError: Error, Equatable {
     case invalidProfileData
     case fileSystemError(String)
     case profileNameEmpty
+}
+
+/// Validation result for stick mapping configuration
+/// Requirements: 8.3 - Validate configuration on load and report errors
+public struct StickMappingValidationResult {
+    public let isValid: Bool
+    public let errors: [String]
+    public let validatedProfile: Profile
+    
+    public init(isValid: Bool, errors: [String], validatedProfile: Profile) {
+        self.isValid = isValid
+        self.errors = errors
+        self.validatedProfile = validatedProfile
+    }
 }
 
 /// Profile manager for loading, saving, and managing profiles
@@ -29,6 +44,9 @@ public final class ProfileManager: ProfileManagerProtocol {
     
     /// JSON decoder for deserialization
     private let decoder: JSONDecoder
+    
+    /// Logger for validation errors
+    private let logger = Logger(subsystem: "com.ps5gamepadmapper", category: "ProfileManager")
     
     /// Callback when active profile changes (for mapping deactivation)
     public var onProfileWillChange: ((Profile?) -> Void)?
@@ -87,6 +105,7 @@ public final class ProfileManager: ProfileManagerProtocol {
     
     /// Load a profile by name
     /// Requirements: 13.2 - Parse JSON file and apply all mappings within 500ms
+    /// Requirements: 8.3 - Validate configuration on load and report errors for invalid data
     public func loadProfile(_ name: String) throws -> Profile {
         let fileURL = profileURL(for: name)
         
@@ -97,7 +116,13 @@ public final class ProfileManager: ProfileManagerProtocol {
         do {
             let data = try Data(contentsOf: fileURL)
             let profile = try decoder.decode(Profile.self, from: data)
-            return profile
+            
+            // Validate stick mappings and return sanitized profile
+            let validationResult = validateStickMappings(profile)
+            if !validationResult.isValid {
+                logger.warning("[ProfileManager] Profile '\(name)' has invalid stick mappings, using defaults for invalid values")
+            }
+            return validationResult.validatedProfile
         } catch is DecodingError {
             throw ProfileManagerError.invalidProfileData
         } catch {
@@ -221,6 +246,7 @@ public final class ProfileManager: ProfileManagerProtocol {
     
     /// Refresh the list of available profiles from disk
     /// Requirements: 13.5 - Display all available profiles with their names
+    /// Requirements: 8.3 - Validate configuration on load and report errors for invalid data
     public func refreshProfiles() throws {
         profiles.removeAll()
         
@@ -239,9 +265,16 @@ public final class ProfileManager: ProfileManagerProtocol {
             do {
                 let data = try Data(contentsOf: fileURL)
                 let profile = try decoder.decode(Profile.self, from: data)
-                profiles.append(profile)
+                
+                // Validate stick mappings and use sanitized profile
+                let validationResult = validateStickMappings(profile)
+                if !validationResult.isValid {
+                    logger.warning("[ProfileManager] Profile '\(profile.name)' has invalid stick mappings, using defaults for invalid values")
+                }
+                profiles.append(validationResult.validatedProfile)
             } catch {
                 // Skip invalid profile files
+                logger.error("[ProfileManager] Failed to load profile from \(fileURL.lastPathComponent): \(error.localizedDescription)")
                 continue
             }
         }
@@ -280,5 +313,153 @@ public final class ProfileManager: ProfileManagerProtocol {
         let sanitizedName = name.replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: ":", with: "_")
         return profilesDirectory.appendingPathComponent("\(sanitizedName).json")
+    }
+    
+    // MARK: - Stick Mapping Validation
+    // Requirements: 8.3 - Validate configuration on load and report errors for invalid data
+    
+    /// Validate and sanitize stick mapping configurations in a profile
+    /// - Parameter profile: The profile to validate
+    /// - Returns: Validation result with sanitized profile and any errors found
+    public func validateStickMappings(_ profile: Profile) -> StickMappingValidationResult {
+        var errors: [String] = []
+        var validatedMappings: [Mapping] = []
+        
+        for mapping in profile.mappings {
+            let (validatedMapping, mappingErrors) = validateMapping(mapping)
+            validatedMappings.append(validatedMapping)
+            errors.append(contentsOf: mappingErrors)
+        }
+        
+        // Log errors if any
+        for error in errors {
+            logger.error("[ProfileManager] Stick mapping validation error: \(error)")
+        }
+        
+        let validatedProfile = Profile(
+            id: profile.id,
+            name: profile.name,
+            mappings: validatedMappings,
+            macros: profile.macros,
+            scripts: profile.scripts,
+            applicationBindings: profile.applicationBindings
+        )
+        
+        return StickMappingValidationResult(
+            isValid: errors.isEmpty,
+            errors: errors,
+            validatedProfile: validatedProfile
+        )
+    }
+    
+    /// Validate a single mapping and return sanitized version with any errors
+    private func validateMapping(_ mapping: Mapping) -> (Mapping, [String]) {
+        var errors: [String] = []
+        var validatedInput = mapping.input
+        var validatedAction = mapping.action
+        
+        // Validate direction input threshold
+        if case .direction(let directionInput) = mapping.input {
+            let (validatedDirection, directionErrors) = validateDirectionInput(directionInput)
+            validatedInput = .direction(validatedDirection)
+            errors.append(contentsOf: directionErrors)
+        }
+        
+        // Validate mouse move action parameters
+        if case .mouseMove(let mouseAction) = mapping.action {
+            let (validatedMouseAction, mouseErrors) = validateMouseMoveAction(mouseAction)
+            validatedAction = .mouseMove(validatedMouseAction)
+            errors.append(contentsOf: mouseErrors)
+        }
+        
+        let validatedMapping = Mapping(
+            id: mapping.id,
+            input: validatedInput,
+            trigger: mapping.trigger,
+            action: validatedAction
+        )
+        
+        return (validatedMapping, errors)
+    }
+    
+    /// Validate direction input threshold and return sanitized version
+    /// Requirements: 2.5 - Threshold values from 0.1 to 0.9
+    private func validateDirectionInput(_ input: DirectionInput) -> (DirectionInput, [String]) {
+        var errors: [String] = []
+        var threshold = input.threshold
+        
+        // Threshold range: 0.1 to 0.9
+        if threshold < 0.1 {
+            errors.append("Direction threshold \(threshold) is below minimum 0.1 for \(input.stick.rawValue) \(input.direction.rawValue), using 0.1")
+            threshold = 0.1
+        } else if threshold > 0.9 {
+            errors.append("Direction threshold \(threshold) is above maximum 0.9 for \(input.stick.rawValue) \(input.direction.rawValue), using 0.9")
+            threshold = 0.9
+        }
+        
+        let validatedInput = DirectionInput(
+            stick: input.stick,
+            direction: input.direction,
+            threshold: threshold
+        )
+        
+        return (validatedInput, errors)
+    }
+    
+    /// Validate mouse move action parameters and return sanitized version
+    /// Requirements: 4.1 - Sensitivity range 0.1 to 10.0
+    /// Requirements: 4.2 - Deadzone range 0.0 to 0.5
+    /// Requirements: 4.4 - Exponential power range 1.0 to 4.0
+    private func validateMouseMoveAction(_ action: MouseMoveAction) -> (MouseMoveAction, [String]) {
+        var errors: [String] = []
+        var sensitivity = action.sensitivity
+        var deadzone = action.deadzone
+        var curve = action.curve
+        
+        // Sensitivity range: 0.1 to 10.0
+        if sensitivity < 0.1 {
+            errors.append("Mouse sensitivity \(sensitivity) is below minimum 0.1, using 0.1")
+            sensitivity = 0.1
+        } else if sensitivity > 10.0 {
+            errors.append("Mouse sensitivity \(sensitivity) is above maximum 10.0, using 10.0")
+            sensitivity = 10.0
+        }
+        
+        // Deadzone range: 0.0 to 0.5
+        if deadzone < 0.0 {
+            errors.append("Mouse deadzone \(deadzone) is below minimum 0.0, using 0.0")
+            deadzone = 0.0
+        } else if deadzone > 0.5 {
+            errors.append("Mouse deadzone \(deadzone) is above maximum 0.5, using 0.5")
+            deadzone = 0.5
+        }
+        
+        // Validate exponential power if applicable
+        if case .exponential(let power) = action.curve {
+            var validatedPower = power
+            if power < 1.0 {
+                errors.append("Exponential power \(power) is below minimum 1.0, using 1.0")
+                validatedPower = 1.0
+            } else if power > 4.0 {
+                errors.append("Exponential power \(power) is above maximum 4.0, using 4.0")
+                validatedPower = 4.0
+            }
+            curve = .exponential(power: validatedPower)
+        }
+        
+        let validatedAction = MouseMoveAction(
+            sensitivity: sensitivity,
+            deadzone: deadzone,
+            curve: curve
+        )
+        
+        return (validatedAction, errors)
+    }
+    
+    /// Load a profile with validation
+    /// Requirements: 8.3 - Validate configuration on load and report errors for invalid data
+    public func loadProfileWithValidation(_ name: String) throws -> StickMappingValidationResult {
+        let profile = try loadProfile(name)
+        return validateStickMappings(profile)
     }
 }

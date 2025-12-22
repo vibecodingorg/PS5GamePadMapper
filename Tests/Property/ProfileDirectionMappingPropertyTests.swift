@@ -221,6 +221,7 @@ final class ProfileDirectionMappingPropertyTests: XCTestCase {
                     case .direction: hasDirection = true
                     case .button: hasButton = true
                     case .axis: hasAxis = true
+                    case .stick: break  // Stick is for UI selection only
                     }
                 }
                 

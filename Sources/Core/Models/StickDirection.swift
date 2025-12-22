@@ -66,4 +66,34 @@ public enum StickDirection: String, Codable, CaseIterable, Equatable, Hashable {
             return 315
         }
     }
+    
+    /// Short arrow symbol label for the direction
+    /// Requirements: 6.2 - Show direction icon (e.g., "↑", "↗")
+    public var shortLabel: String {
+        switch self {
+        case .up: return "↑"
+        case .down: return "↓"
+        case .left: return "←"
+        case .right: return "→"
+        case .upLeft: return "↖"
+        case .upRight: return "↗"
+        case .downLeft: return "↙"
+        case .downRight: return "↘"
+        }
+    }
+    
+    /// Localized display name for the direction
+    /// Requirements: 6.2 - Show direction name (e.g., "上", "右上")
+    public var localizedName: String {
+        switch self {
+        case .up: return "上"
+        case .down: return "下"
+        case .left: return "左"
+        case .right: return "右"
+        case .upLeft: return "左上"
+        case .upRight: return "右上"
+        case .downLeft: return "左下"
+        case .downRight: return "右下"
+        }
+    }
 }

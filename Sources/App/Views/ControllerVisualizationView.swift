@@ -16,6 +16,9 @@ struct ControllerVisualizationView: View {
     var configuredDirections: [StickType: Set<StickDirection>] = [:]
     var onStickDirectionTapped: ((StickType) -> Void)?
     
+    // Mouse mapping support - Requirements: 7.2
+    var stickMouseMappings: [StickType: Bool] = [:]
+    
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
@@ -41,7 +44,8 @@ struct ControllerVisualizationView: View {
                     onDirectionTapped: onStickDirectionTapped,
                     valueX: axisValues[.leftStickX] ?? 0,
                     valueY: axisValues[.leftStickY] ?? 0,
-                    hasDirectionMappings: !(configuredDirections[.left]?.isEmpty ?? true)
+                    hasDirectionMappings: !(configuredDirections[.left]?.isEmpty ?? true),
+                    hasMouseMapping: stickMouseMappings[.left] ?? false
                 )
                 .position(x: width * 0.25, y: height * 0.45)
                 
@@ -56,7 +60,8 @@ struct ControllerVisualizationView: View {
                     onDirectionTapped: onStickDirectionTapped,
                     valueX: axisValues[.rightStickX] ?? 0,
                     valueY: axisValues[.rightStickY] ?? 0,
-                    hasDirectionMappings: !(configuredDirections[.right]?.isEmpty ?? true)
+                    hasDirectionMappings: !(configuredDirections[.right]?.isEmpty ?? true),
+                    hasMouseMapping: stickMouseMappings[.right] ?? false
                 )
                 .position(x: width * 0.75, y: height * 0.65)
                 
@@ -162,7 +167,7 @@ struct ControllerBodyShape: Shape {
 }
 
 /// Analog stick visualization with direction mapping support
-/// Requirements: 3.1, 3.4 - Tap gesture to open direction selector for sticks
+/// Requirements: 1.1, 1.4, 7.1, 7.2, 7.3 - Tap gesture to select stick, visual indicators for modes
 struct StickView: View {
     let label: String
     let stickType: StickType
@@ -174,11 +179,20 @@ struct StickView: View {
     let valueX: Double
     let valueY: Double
     var hasDirectionMappings: Bool = false
+    var hasMouseMapping: Bool = false  // Requirements: 7.2 - Mouse mode indicator
     
+    /// Check if this stick is selected
+    /// Requirements: 1.4 - Visual selection indicator
     private var isSelected: Bool {
+        // Check if stick itself is selected
+        if case .stick(let type) = selectedInput {
+            return type == stickType
+        }
+        // Also check axis selection for backward compatibility
         if case .axis(let type) = selectedInput {
             return type == axisX || type == axisY
         }
+        // Also check direction selection
         if case .direction(let dirInput) = selectedInput {
             return dirInput.stick == stickType
         }
@@ -192,10 +206,11 @@ struct StickView: View {
                 .fill(Color.gray.opacity(0.3))
                 .frame(width: 70, height: 70)
             
-            // Direction indicator ring (shows if direction mappings exist)
-            if hasDirectionMappings {
+            // Selection indicator - blue border when selected
+            // Requirements: 1.4 - Same visual selection indicator as buttons
+            if isSelected {
                 Circle()
-                    .stroke(Color.green.opacity(0.5), lineWidth: 3)
+                    .stroke(Color.blue, lineWidth: 2)
                     .frame(width: 70, height: 70)
             }
             
@@ -211,23 +226,29 @@ struct StickView: View {
                 .foregroundColor(.white)
                 .offset(x: valueX * 12, y: valueY * 12)
             
-            // Direction mode indicator
+            // Mode indicator - Requirements: 7.1, 7.2, 7.3
+            // Direction mode: green direction icon
+            // Mouse mode: purple mouse icon
+            // No mapping: no indicator
             if hasDirectionMappings {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: 8))
                     .foregroundColor(.green)
                     .offset(x: 25, y: -25)
+            } else if hasMouseMapping {
+                Image(systemName: "cursorarrow.motionlines")
+                    .font(.system(size: 8))
+                    .foregroundColor(.purple)
+                    .offset(x: 25, y: -25)
             }
         }
         .onTapGesture {
-            // Single tap opens direction selector directly
-            onDirectionTapped?(stickType)
+            // Requirements: 1.1 - Single tap selects the stick (consistent with button behavior)
+            // Instead of directly opening direction selector, select the stick first
+            selectedInput = .stick(stickType)
+            onInputSelected(.stick(stickType))
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 35)
-                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-        )
-        .help("点击配置8方向映射")
+        .help("点击选中摇杆，然后点击编辑映射按钮配置")
     }
 }
 
@@ -515,7 +536,8 @@ struct CenterButton: View {
         pressedButtons: [.cross, .l1],
         axisValues: [.leftStickX: 0.5, .leftStickY: -0.3, .l2Trigger: 0.7],
         configuredDirections: [.left: [.up, .down, .left, .right]],
-        onStickDirectionTapped: { _ in }
+        onStickDirectionTapped: { _ in },
+        stickMouseMappings: [.right: true]
     )
     .frame(width: 600, height: 400)
     .padding()

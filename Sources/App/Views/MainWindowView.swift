@@ -16,6 +16,13 @@ struct StickTypeWrapper: Identifiable {
     var id: String { stick.rawValue }
 }
 
+/// Wrapper for stick mapping editor with optional preselected direction
+struct StickEditorWrapper: Identifiable {
+    let stick: StickType
+    let preselectedDirection: StickDirection?
+    var id: String { "\(stick.rawValue)-\(preselectedDirection?.rawValue ?? "none")" }
+}
+
 /// Main window view combining all UI components
 /// Requirements: 18.1, 18.2, 18.3, 18.4, 18.5
 /// Requirements: 3.1, 3.2, 3.4, 3.5 - Direction selector integration
@@ -28,6 +35,10 @@ struct MainWindowView: View {
     
     // Direction selector state - use wrapper for sheet(item:)
     @State private var directionSelectorStick: StickTypeWrapper?
+    
+    // Stick mapping editor state - use wrapper for sheet(item:)
+    // Requirements: 1.3 - Open stick mapping editor when edit button clicked
+    @State private var editingStickWrapper: StickEditorWrapper?
     
     // Settings state
     @State private var showSettings = false
@@ -72,7 +83,8 @@ struct MainWindowView: View {
                         onStickDirectionTapped: { stick in
                             print("[MainWindowView] Stick tapped: \(stick)")
                             directionSelectorStick = StickTypeWrapper(stick: stick)
-                        }
+                        },
+                        stickMouseMappings: viewModel.stickMouseMappings
                     )
                     .padding()
                 }
@@ -80,17 +92,44 @@ struct MainWindowView: View {
                 
                 // Mapping detail panel with edit button
                 VStack {
-                    MappingDetailPanel(
-                        selectedInput: viewModel.selectedInput,
-                        mapping: viewModel.selectedMapping
-                    )
+                    // Pass stick-specific data when a stick is selected
+                    // Requirements: 1.2, 2.1, 2.2, 2.3 - Display stick mapping configuration
+                    if case .stick(let stickType) = viewModel.selectedInput {
+                        MappingDetailPanel(
+                            selectedInput: viewModel.selectedInput,
+                            mapping: viewModel.selectedMapping,
+                            directionMappings: viewModel.getDirectionMappings(for: stickType),
+                            mouseConfig: viewModel.getMouseConfig(for: stickType),
+                            stickMode: viewModel.getStickMode(for: stickType),
+                            onDirectionTapped: { direction in
+                                // Requirements: 6.9 - Open stick mapping editor with pre-selected direction
+                                editingStickWrapper = StickEditorWrapper(stick: stickType, preselectedDirection: direction)
+                            },
+                            onEditTapped: {
+                                // Requirements: 1.3 - Open stick mapping editor when edit button clicked
+                                editingStickWrapper = StickEditorWrapper(stick: stickType, preselectedDirection: nil)
+                            }
+                        )
+                        // Force refresh when profile changes
+                        .id("\(stickType.rawValue)-\(viewModel.selectedProfile?.id.uuidString ?? "")-\(viewModel.getDirectionMappings(for: stickType).count)-\(viewModel.getMouseConfig(for: stickType) != nil)-\(viewModel.getStickMode(for: stickType).rawValue)")
+                    } else {
+                        MappingDetailPanel(
+                            selectedInput: viewModel.selectedInput,
+                            mapping: viewModel.selectedMapping
+                        )
+                    }
                     
-                    if viewModel.selectedInput != nil {
-                        Button("编辑映射") {
-                            showMappingEditor = true
+                    // Show edit button for non-stick inputs (stick has its own edit button in StickMappingDetailView)
+                    if let input = viewModel.selectedInput {
+                        if case .stick = input {
+                            // Stick has edit button in StickMappingDetailView
+                        } else {
+                            Button("编辑映射") {
+                                showMappingEditor = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .padding(.bottom)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .padding(.bottom)
                     }
                 }
                 .frame(minWidth: 250, maxWidth: 300)
@@ -180,6 +219,55 @@ struct MainWindowView: View {
                 onCancel: {
                     showSettings = false
                 }
+            )
+        }
+        // Requirements: 5.6 - Stick mapping editor sheet
+        .sheet(item: $editingStickWrapper) { wrapper in
+            StickMappingEditorView(
+                stick: wrapper.stick,
+                currentX: viewModel.axisValues[wrapper.stick == .left ? .leftStickX : .rightStickX] ?? 0,
+                currentY: -(viewModel.axisValues[wrapper.stick == .left ? .leftStickY : .rightStickY] ?? 0),
+                directionMappings: viewModel.getDirectionMappings(for: wrapper.stick),
+                mouseConfig: viewModel.getMouseConfig(for: wrapper.stick),
+                availableMacros: viewModel.selectedProfile?.macros ?? [],
+                availableScripts: viewModel.selectedProfile?.scripts ?? [],
+                onDirectionMappingChanged: { direction, mapping in
+                    let input = InputSource.direction(DirectionInput(stick: wrapper.stick, direction: direction))
+                    viewModel.updateMapping(for: input, mapping: mapping)
+                },
+                onMouseConfigChanged: { mouseConfig in
+                    // Update mouse config for both X and Y axes
+                    let xAxis: AxisType = wrapper.stick == .left ? .leftStickX : .rightStickX
+                    let yAxis: AxisType = wrapper.stick == .left ? .leftStickY : .rightStickY
+                    
+                    if let config = mouseConfig {
+                        // Create mappings for both axes
+                        let xMapping = Mapping(
+                            input: .axis(xAxis),
+                            trigger: .press,
+                            action: .mouseMove(config)
+                        )
+                        let yMapping = Mapping(
+                            input: .axis(yAxis),
+                            trigger: .press,
+                            action: .mouseMove(config)
+                        )
+                        viewModel.updateMapping(for: .axis(xAxis), mapping: xMapping)
+                        viewModel.updateMapping(for: .axis(yAxis), mapping: yMapping)
+                    } else {
+                        // Clear mouse mappings
+                        viewModel.updateMapping(for: .axis(xAxis), mapping: nil)
+                        viewModel.updateMapping(for: .axis(yAxis), mapping: nil)
+                    }
+                },
+                onDismiss: {
+                    editingStickWrapper = nil
+                },
+                stickMode: viewModel.getStickMode(for: wrapper.stick),
+                onStickModeChanged: { mode in
+                    viewModel.updateStickMode(for: wrapper.stick, mode: mode)
+                },
+                preselectedDirection: wrapper.preselectedDirection
             )
         }
     }
@@ -301,6 +389,35 @@ class MainWindowViewModel: ObservableObject {
               let profile = selectedProfile else {
             return nil
         }
+        
+        // Handle stick input specially - return primary mapping (direction or mouse)
+        // Requirements: 1.2 - Display stick's current mapping configuration
+        if case .stick(let stickType) = input {
+            // First check for mouse mode mapping (axis-based)
+            let xAxis: AxisType = stickType == .left ? .leftStickX : .rightStickX
+            if let mouseMapping = profile.mappings.first(where: {
+                if case .axis(let axis) = $0.input, axis == xAxis,
+                   case .mouseMove = $0.action {
+                    return true
+                }
+                return false
+            }) {
+                return mouseMapping
+            }
+            
+            // Then check for any direction mapping
+            if let directionMapping = profile.mappings.first(where: {
+                if case .direction(let dirInput) = $0.input, dirInput.stick == stickType {
+                    return true
+                }
+                return false
+            }) {
+                return directionMapping
+            }
+            
+            return nil
+        }
+        
         return profile.mappings.first { $0.input == input }
     }
     
@@ -337,6 +454,81 @@ class MainWindowViewModel: ObservableObject {
         }
         
         return result
+    }
+    
+    /// Get mouse mode configuration for a specific stick
+    /// Requirements: 2.2 - Display mouse movement parameters in detail panel
+    func getMouseConfig(for stick: StickType) -> MouseMoveAction? {
+        guard let profile = selectedProfile else {
+            return nil
+        }
+        
+        // Check for mouse move action on the stick's X or Y axis
+        let xAxis: AxisType = stick == .left ? .leftStickX : .rightStickX
+        let yAxis: AxisType = stick == .left ? .leftStickY : .rightStickY
+        
+        for mapping in profile.mappings {
+            if case .axis(let axisType) = mapping.input,
+               (axisType == xAxis || axisType == yAxis),
+               case .mouseMove(let mouseAction) = mapping.action {
+                return mouseAction
+            }
+        }
+        
+        return nil
+    }
+    
+    /// Check if a stick has mouse mode mapping
+    /// Requirements: 7.2 - Display mouse cursor icon indicator
+    func hasMouseMapping(for stick: StickType) -> Bool {
+        return getMouseConfig(for: stick) != nil
+    }
+    
+    /// Get the explicitly stored stick mode for a specific stick
+    func getStickMode(for stick: StickType) -> StickMappingMode {
+        guard let profile = selectedProfile else {
+            return .direction
+        }
+        return profile.stickMode(for: stick)
+    }
+    
+    /// Update the stick mode for a specific stick
+    func updateStickMode(for stick: StickType, mode: StickMappingMode) {
+        guard var profile = selectedProfile else {
+            NSLog("[MainWindowViewModel] updateStickMode: No selected profile!")
+            return
+        }
+        
+        NSLog("[MainWindowViewModel] updateStickMode: stick=%@, mode=%@", 
+              stick.rawValue, mode.rawValue)
+        
+        // Update the stick mode
+        if profile.stickModes == nil {
+            profile.stickModes = [:]
+        }
+        profile.stickModes?[stick] = mode
+        
+        // Update the profile
+        selectedProfile = profile
+        
+        // Save immediately
+        do {
+            try coordinator.profileManager.saveProfile(profile)
+            // Re-activate the profile to apply changes
+            coordinator.profileManager.setActiveProfile(profile)
+            NSLog("[MainWindowViewModel] updateStickMode: profile saved successfully")
+        } catch {
+            print("Failed to save profile: \(error)")
+        }
+    }
+    
+    /// Get mouse mapping status for all sticks
+    /// Requirements: 7.2 - Display mouse cursor icon indicator on stick visualization
+    var stickMouseMappings: [StickType: Bool] {
+        return [
+            .left: hasMouseMapping(for: .left),
+            .right: hasMouseMapping(for: .right)
+        ]
     }
     
     // MARK: - Initialization
@@ -402,24 +594,37 @@ class MainWindowViewModel: ObservableObject {
     /// Update or remove a mapping for the given input
     /// Requirements: 19.2 - Apply change immediately without requiring a save action
     func updateMapping(for input: InputSource, mapping: Mapping?) {
-        guard var profile = selectedProfile else { return }
+        guard var profile = selectedProfile else { 
+            NSLog("[MainWindowViewModel] updateMapping: No selected profile!")
+            return 
+        }
+        
+        NSLog("[MainWindowViewModel] updateMapping: input=%@, hasMapping=%@", 
+              String(describing: input), 
+              mapping != nil ? "YES" : "NO")
         
         // Remove existing mapping for this input
+        let beforeCount = profile.mappings.count
         profile.mappings.removeAll { $0.input == input }
+        let afterCount = profile.mappings.count
+        NSLog("[MainWindowViewModel] updateMapping: removed %d mappings", beforeCount - afterCount)
         
         // Add new mapping if provided
         if let mapping = mapping {
             profile.mappings.append(mapping)
+            NSLog("[MainWindowViewModel] updateMapping: added new mapping")
         }
         
         // Update the profile
         selectedProfile = profile
+        NSLog("[MainWindowViewModel] updateMapping: profile updated, total mappings=%d", profile.mappings.count)
         
         // Save immediately
         do {
             try coordinator.profileManager.saveProfile(profile)
             // Re-activate the profile to apply changes
             coordinator.profileManager.setActiveProfile(profile)
+            NSLog("[MainWindowViewModel] updateMapping: profile saved successfully")
         } catch {
             print("Failed to save profile: \(error)")
         }
