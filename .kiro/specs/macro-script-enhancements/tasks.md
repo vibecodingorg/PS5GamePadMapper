@@ -1,0 +1,162 @@
+# Implementation Plan
+
+- [x] 1. Implement Parallel Macro Execution
+  - [x] 1.1 Create MacroInstance class
+    - Create MacroInstance class with id, macro, currentStep, pressedKeys, isRunning, loopCount
+    - Add conditionEvaluator property for whileCondition macros
+    - Implement Identifiable conformance
+    - _Requirements: 1.2_
+  - [x] 1.2 Refactor MacroScheduler for parallel execution
+    - Replace single isRunning flag with runningInstances dictionary
+    - Modify execute() to create new MacroInstance and return instance ID
+    - Update execution queue to handle multiple concurrent macros
+    - _Requirements: 1.1, 1.2_
+  - [x] 1.3 Write property test for parallel macro independence
+    - **Property 1: Parallel Macro Independence**
+    - **Validates: Requirements 1.1, 1.2, 1.3**
+  - [x] 1.4 Implement targeted interruption
+    - Add interrupt(instanceId:) method to stop specific macro
+    - Release only pressed keys from that instance
+    - Remove instance from runningInstances
+    - _Requirements: 1.4_
+  - [x] 1.5 Write property test for targeted macro interruption
+    - **Property 2: Targeted Macro Interruption**
+    - **Validates: Requirements 1.4**
+  - [x] 1.6 Implement global interruption
+    - Rename existing interrupt() to interruptAll()
+    - Stop all running instances and release all keys
+    - _Requirements: 1.5_
+  - [x] 1.7 Write property test for global macro interruption
+    - **Property 3: Global Macro Interruption**
+    - **Validates: Requirements 1.5**
+  - [x] 1.8 Implement running macros query
+    - Add runningInstances property returning [MacroInstance]
+    - Include accurate state for each instance
+    - _Requirements: 1.6_
+  - [x] 1.9 Write property test for running macros query accuracy
+    - **Property 4: Running Macros Query Accuracy**
+    - **Validates: Requirements 1.6**
+
+- [x] 2. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 3. Implement Script AST and Parser
+  - [x] 3.1 Create AST node types
+    - Create ConditionExpression enum with all cases
+    - Create ComparisonOperator enum
+    - Create IntExpression enum
+    - Create Statement protocol and implementations (IfStatement, WhileStatement, BreakStatement, ContinueStatement, FunctionCallStatement)
+    - _Requirements: 2.1, 2.2, 3.1_
+  - [x] 3.2 Implement control flow parser
+    - Extend ScriptEngine.parse() to recognize if/else syntax
+    - Extend ScriptEngine.parse() to recognize while syntax
+    - Implement condition expression parsing
+    - Handle nested blocks
+    - _Requirements: 2.1, 2.2, 3.1_
+  - [x] 3.3 Write property test for control flow parsing round-trip
+    - **Property 5: Control Flow Parsing Round-Trip**
+    - **Validates: Requirements 2.1, 2.2, 3.1**
+  - [x] 3.4 Create statement generator for testing
+    - Generate random valid if/else statements
+    - Generate random valid while statements
+    - Generate random nested control flow
+    - _Requirements: 2.1, 2.2, 3.1_
+
+- [x] 4. Implement Condition Evaluator
+  - [x] 4.1 Create ConditionEvaluator class
+    - Implement evaluate() for buttonPressed conditions
+    - Implement evaluate() for comparison operators
+    - Implement evaluate() for logical operators (&&, ||, !)
+    - _Requirements: 2.3, 2.4, 2.5, 3.2_
+  - [x] 4.2 Create condition expression generator for testing
+    - Generate random button state conditions
+    - Generate random comparison expressions
+    - Generate random logical combinations
+    - _Requirements: 2.3, 2.4, 2.5_
+  - [x] 4.3 Write property test for condition expression evaluation
+    - **Property 6: Condition Expression Evaluation**
+    - **Validates: Requirements 2.3, 2.4, 2.5, 3.2**
+
+- [x] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Implement If Statement Execution
+  - [x] 6.1 Extend ScriptEngine executor for if statements
+    - Execute then-block when condition is true
+    - Execute else-block when condition is false and else exists
+    - Skip when condition is false and no else
+    - _Requirements: 2.6, 2.7_
+  - [x] 6.2 Write property test for if statement execution
+    - **Property 7: If Statement Execution**
+    - **Validates: Requirements 2.6, 2.7**
+
+- [x] 7. Implement While Loop Execution
+  - [x] 7.1 Extend ScriptEngine executor for while loops
+    - Evaluate condition before each iteration
+    - Execute body while condition is true
+    - Exit when condition becomes false
+    - _Requirements: 3.3, 3.4_
+  - [x] 7.2 Write property test for while loop iteration count
+    - **Property 8: While Loop Iteration Count**
+    - **Validates: Requirements 3.3, 3.4**
+  - [x] 7.3 Implement break statement
+    - Exit loop immediately when break encountered
+    - Continue execution after loop
+    - _Requirements: 3.5_
+  - [x] 7.4 Write property test for break statement behavior
+    - **Property 9: Break Statement Behavior**
+    - **Validates: Requirements 3.5**
+  - [x] 7.5 Implement continue statement
+    - Skip remaining statements in current iteration
+    - Begin next iteration
+    - _Requirements: 3.6_
+  - [x] 7.6 Write property test for continue statement behavior
+    - **Property 10: Continue Statement Behavior**
+    - **Validates: Requirements 3.6**
+
+- [x] 8. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 9. Implement WhileCondition Macro Type
+  - [x] 9.1 Extend MacroType enum
+    - Add whileCondition(condition: String) case
+    - Implement Codable conformance for new case
+    - _Requirements: 4.1_
+  - [x] 9.2 Implement whileCondition macro execution
+    - Parse condition string to ConditionExpression
+    - Evaluate condition before each iteration
+    - Stop when condition becomes false
+    - _Requirements: 4.2, 4.3, 4.4_
+  - [x] 9.3 Write property test for whileCondition macro execution
+    - **Property 11: WhileCondition Macro Execution**
+    - **Validates: Requirements 4.2, 4.3, 4.4**
+  - [x] 9.4 Integrate button state provider
+    - Connect MacroScheduler to controller button state
+    - Pass button state to condition evaluator
+    - _Requirements: 4.5_
+  - [x] 9.5 Write property test for whileCondition button state integration
+    - **Property 12: WhileCondition Button State Integration**
+    - **Validates: Requirements 4.5**
+  - [x] 9.6 Write property test for whileCondition serialization round-trip
+    - **Property 13: WhileCondition Macro Serialization Round-Trip**
+    - **Validates: Requirements 4.6**
+
+- [x] 10. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 11. Integration and Wiring
+  - [x] 11.1 Update AppCoordinator for parallel macros
+    - Update macro execution calls to handle instance IDs
+    - Update interruption handling for parallel execution
+    - _Requirements: 1.1, 1.4, 1.5_
+  - [x] 11.2 Update MacroEditorView for whileCondition
+    - Add UI for creating whileCondition macros
+    - Add condition expression input field
+    - _Requirements: 4.1_
+  - [x] 11.3 Update DebugPanelView for parallel macros
+    - Display all running macro instances
+    - Show individual instance states
+    - _Requirements: 1.6_
+
+- [x] 12. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

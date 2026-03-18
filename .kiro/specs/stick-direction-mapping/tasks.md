@@ -1,0 +1,164 @@
+# Implementation Plan
+
+- [x] 1. Create core direction models and types
+  - [x] 1.1 Create StickDirection enum with 8 directions
+    - Add `StickDirection.swift` in Models folder
+    - Include `isCardinal`, `isDiagonal`, `adjacentCardinals`, `centerAngle` computed properties
+    - Implement Codable, CaseIterable, Equatable, Hashable conformance
+    - _Requirements: 1.1_
+  - [x] 1.2 Create StickType enum
+    - Add left/right stick identification
+    - Implement Codable conformance
+    - _Requirements: 1.1_
+  - [x] 1.3 Create DirectionInput model
+    - Include stick, direction, and threshold properties
+    - Implement threshold clamping to [0.1, 0.9]
+    - Implement Codable, Equatable, Hashable conformance
+    - _Requirements: 2.1, 2.5_
+  - [x] 1.4 Write property test for direction threshold validation
+    - **Property 9: Direction Threshold Validation**
+    - **Validates: Requirements 2.5**
+  - [x] 1.5 Write property test for direction input serialization
+    - **Property 1: Direction Input Serialization Round-Trip**
+    - **Validates: Requirements 1.6, 1.7**
+
+- [x] 2. Extend InputSource to support direction input
+  - [x] 2.1 Add direction case to InputSource enum
+    - Extend existing `InputSource` enum with `.direction(DirectionInput)` case
+    - Update Codable implementation for new case
+    - _Requirements: 2.1, 2.2_
+  - [x] 2.2 Create DirectionEvent and DirectionState models
+    - Add `DirectionEvent.swift` with stick, direction, state, angle, magnitude
+    - Add `DirectionState` enum with pressed, released, held cases
+    - _Requirements: 1.5, 2.4_
+
+- [x] 3. Implement DirectionDetector
+  - [x] 3.1 Create DirectionDetector class with configuration
+    - Add `DirectionDetector.swift` in Core folder
+    - Implement Config struct with deadzone, threshold, cardinalAngle
+    - Track active directions per stick
+    - _Requirements: 6.1, 6.2, 6.3_
+  - [x] 3.2 Implement angle and magnitude calculation
+    - Use atan2 for angle calculation (convert to degrees 0-360)
+    - Calculate magnitude as sqrt(x² + y²)
+    - _Requirements: 6.1_
+  - [x] 3.3 Implement direction classification
+    - Classify angle into 8 direction zones
+    - Cardinal directions: ±22.5° from center angles
+    - Diagonal directions: remaining 45° sectors
+    - _Requirements: 1.3, 1.4_
+  - [x] 3.4 Write property test for angle to direction classification
+    - **Property 2: Angle to Direction Classification**
+    - **Validates: Requirements 1.3, 1.4**
+  - [x] 3.5 Implement processStickInput method
+    - Check magnitude against threshold
+    - Classify direction if above threshold
+    - Track state changes and emit events
+    - _Requirements: 1.2, 6.2, 6.3_
+  - [x] 3.6 Write property test for threshold-based activation
+    - **Property 3: Threshold-based Direction Activation**
+    - **Validates: Requirements 1.2, 6.2, 6.3**
+  - [x] 3.7 Implement direction state transition logic
+    - Emit release before press on direction change
+    - Prevent repeated press events when held
+    - _Requirements: 6.4, 6.5_
+  - [x] 3.8 Write property test for direction state transitions
+    - **Property 4: Direction State Transitions**
+    - **Validates: Requirements 1.5, 2.4, 4.2, 4.3, 6.4, 6.5**
+
+- [x] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 5. Extend MappingEngine for direction handling
+  - [x] 5.1 Add handleDirectionEvent method
+    - Find direction mappings for the event
+    - Execute corresponding actions
+    - _Requirements: 2.2, 5.2_
+  - [x] 5.2 Implement diagonal fallback logic
+    - When diagonal has no mapping, trigger adjacent cardinals
+    - _Requirements: 4.4, 5.3_
+  - [x] 5.3 Write property test for diagonal fallback
+    - **Property 5: Diagonal Fallback to Cardinals**
+    - **Validates: Requirements 4.4, 5.3**
+  - [x] 5.4 Implement diagonal priority logic
+    - When diagonal has mapping, skip adjacent cardinals
+    - _Requirements: 5.4_
+  - [x] 5.5 Write property test for diagonal priority
+    - **Property 6: Diagonal Priority over Cardinals**
+    - **Validates: Requirements 5.4**
+  - [x] 5.6 Implement direction mapping priority over axis
+    - Check for direction mappings before axis mappings
+    - Skip axis processing if direction mapping exists
+    - _Requirements: 7.3_
+  - [x] 5.7 Write property test for direction priority over axis
+    - **Property 8: Direction Mapping Priority over Axis**
+    - **Validates: Requirements 7.3**
+
+- [x] 6. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 7. Integrate direction detection into InputProcessor
+  - [x] 7.1 Add DirectionDetector to InputProcessor
+    - Create DirectionDetector instance
+    - Process paired X/Y axis inputs for direction detection
+    - _Requirements: 1.1, 1.2_
+  - [x] 7.2 Implement stick input pairing
+    - Buffer X and Y axis inputs
+    - Trigger direction detection when both axes updated
+    - _Requirements: 1.1_
+
+- [x] 8. Update Profile serialization for direction mappings
+  - [x] 8.1 Verify Profile serialization with direction mappings
+    - Ensure Mapping with InputSource.direction serializes correctly
+    - Test backward compatibility with existing profiles
+    - _Requirements: 7.1, 7.4_
+  - [x] 8.2 Write property test for profile direction mapping round-trip
+    - **Property 7: Profile Direction Mapping Round-Trip**
+    - **Validates: Requirements 7.1, 7.2, 7.4, 7.5**
+
+- [x] 9. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 10. Create test generators
+  - [x] 10.1 Create DirectionInputGenerator
+    - Generate random StickType, StickDirection, threshold
+    - _Requirements: 1.6, 2.1_
+  - [x] 10.2 Create StickPositionGenerator
+    - Generate random x, y coordinates in [-1, 1] range
+    - Include edge cases: deadzone, threshold boundaries
+    - _Requirements: 6.1_
+  - [x] 10.3 Create DirectionMappingGenerator
+    - Generate random direction mappings with various action types
+    - _Requirements: 2.2_
+
+- [x] 11. Implement Direction Selector UI
+  - [x] 11.1 Create DirectionSelectorView
+    - Display 8 direction zones in circular layout
+    - Show current stick position indicator
+    - Highlight configured directions
+    - _Requirements: 3.1, 3.3, 3.4_
+  - [x] 11.2 Integrate with ControllerVisualizationView
+    - Add tap gesture to open direction selector for sticks
+    - Pass current axis values for real-time display
+    - _Requirements: 3.1, 3.4_
+  - [x] 11.3 Connect to MappingEditorView
+    - Open mapping editor when direction selected
+    - Pass direction input source to editor
+    - _Requirements: 3.2, 3.5_
+
+- [x] 12. Update Debug Panel for direction display
+  - [x] 12.1 Add direction state display
+    - Show active direction name
+    - Display angle in degrees
+    - Display magnitude (0.0-1.0)
+    - _Requirements: 8.1, 8.2, 8.3_
+  - [x] 12.2 Add direction event logging
+    - Log direction press/release events
+    - Log triggered actions for direction mappings
+    - _Requirements: 8.4_
+  - [x] 12.3 Write property test for debug panel formatting
+    - **Property 10: Debug Panel Stick State Formatting**
+    - **Validates: Requirements 8.2, 8.3**
+
+- [x] 13. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

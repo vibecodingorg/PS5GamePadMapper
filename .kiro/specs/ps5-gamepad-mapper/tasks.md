@@ -1,0 +1,276 @@
+# Implementation Plan
+
+- [x] 1. Set up project structure and core interfaces
+  - Create Xcode project with SwiftUI for macOS
+  - Set up directory structure: Sources/, Tests/, Resources/
+  - Add SwiftCheck dependency via Swift Package Manager
+  - Define all protocol interfaces from design document
+  - Configure Info.plist for required permissions (Accessibility, Bluetooth)
+  - _Requirements: 16.1, 16.2, 16.3_
+
+- [x] 2. Implement data models and serialization
+  - [x] 2.1 Create core data types
+    - Implement ButtonType, AxisType enums with Codable conformance
+    - Implement KeyModifiers OptionSet
+    - Implement ConnectionType enum
+    - _Requirements: 2.4, 3.3_
+  - [x] 2.2 Implement Macro data model
+    - Create Macro struct with Codable conformance
+    - Create MacroStep enum with all action types
+    - Create MacroType enum (sequence, loop, toggle)
+    - _Requirements: 8.2, 8.3_
+  - [x] 2.3 Write property test for Macro serialization round-trip
+    - **Property 7: Macro Serialization Round-Trip**
+    - **Validates: Requirements 8.5, 8.6**
+  - [x] 2.4 Implement Profile data model
+    - Create Profile struct with Codable conformance
+    - Create Mapping struct with input, trigger, action
+    - Create ApplicationBinding struct
+    - _Requirements: 13.1, 13.6_
+  - [x] 2.5 Write property test for Profile serialization round-trip
+    - **Property 15: Profile Serialization Round-Trip**
+    - **Validates: Requirements 13.6, 13.7**
+
+- [x] 3. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Implement Input Processor
+  - [x] 4.1 Create InputProcessor class
+    - Implement axis value normalization (-1.0 to 1.0 for sticks, 0.0 to 1.0 for triggers)
+    - Implement deadzone processing
+    - Implement response curve calculations (linear and exponential)
+    - _Requirements: 3.2, 3.4, 6.4_
+  - [x] 4.2 Write property test for axis normalization bounds
+    - **Property 1: Axis Normalization Bounds**
+    - **Validates: Requirements 3.2**
+  - [x] 4.3 Write property test for deadzone zeroing
+    - **Property 2: Deadzone Zeroing**
+    - **Validates: Requirements 3.4**
+  - [x] 4.4 Implement axis parameter validation
+    - Validate sensitivity range (0.1 to 10.0)
+    - Validate deadzone range (0.0 to 0.5)
+    - _Requirements: 6.2, 6.3_
+  - [x] 4.5 Write property test for axis parameter validation
+    - **Property 5: Axis Parameter Validation**
+    - **Validates: Requirements 6.2, 6.3**
+  - [x] 4.6 Write property test for response curve behavior
+    - **Property 6: Response Curve Behavior**
+    - **Validates: Requirements 6.4**
+
+- [x] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Implement Event Emitter
+  - [x] 6.1 Create EventEmitter class
+    - Implement CGEventPost wrapper for keyboard events
+    - Implement CGEventPost wrapper for mouse button events
+    - Implement CGEventPost wrapper for mouse movement
+    - Implement CGEventPost wrapper for mouse scroll
+    - _Requirements: 4.1, 4.2, 5.1, 6.1_
+  - [x] 6.2 Implement modifier key handling
+    - Ensure modifiers are emitted before primary key
+    - Support Cmd, Ctrl, Alt, Shift combinations
+    - _Requirements: 4.3, 4.4_
+  - [x] 6.3 Write property test for modifier key ordering
+    - **Property 3: Modifier Key Ordering**
+    - **Validates: Requirements 4.4**
+
+- [x] 7. Implement Mapping Engine
+  - [x] 7.1 Create MappingEngine class
+    - Implement button event to action mapping
+    - Implement axis event to action mapping
+    - Support trigger modes: press, release, hold, toggle
+    - _Requirements: 4.5, 5.2, 5.3, 5.4_
+  - [x] 7.2 Implement axis-to-key mapping
+    - Implement threshold-based key press/release
+    - Support configurable activation threshold
+    - _Requirements: 7.1, 7.2, 7.3, 7.4_
+  - [x] 7.3 Write property test for axis-to-key threshold behavior
+    - **Property 4: Axis-to-Key Threshold Behavior**
+    - **Validates: Requirements 7.1, 7.2, 7.3**
+
+- [x] 8. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 9. Implement Macro Scheduler
+  - [x] 9.1 Create MacroScheduler class
+    - Implement sequence macro execution with delays
+    - Implement step-by-step execution with timing
+    - Track current execution state
+    - _Requirements: 8.1, 8.4_
+  - [x] 9.2 Write property test for macro step order preservation
+    - **Property 8: Macro Step Order Preservation**
+    - **Validates: Requirements 8.1**
+  - [x] 9.3 Implement loop macro (turbo)
+    - Implement continuous repetition while trigger held
+    - Support configurable interval (10ms to 5000ms)
+    - Support maximum repeat count
+    - _Requirements: 9.1, 9.2, 9.3, 9.4_
+  - [x] 9.4 Write property test for loop macro repeat count
+    - **Property 9: Loop Macro Repeat Count**
+    - **Validates: Requirements 9.4**
+  - [x] 9.5 Implement toggle macro
+    - Implement start/stop state machine
+    - Track active state for UI display
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [x] 9.6 Write property test for toggle macro state machine
+    - **Property 10: Toggle Macro State Machine**
+    - **Validates: Requirements 10.1, 10.2**
+  - [x] 9.7 Implement macro interruption
+    - Implement interrupt signal handling
+    - Release all pressed keys on interruption
+    - _Requirements: 11.1, 11.2, 11.3_
+  - [x] 9.8 Write property test for macro interruption key release
+    - **Property 11: Macro Interruption Key Release**
+    - **Validates: Requirements 11.2**
+
+- [x] 10. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 11. Implement Script Engine
+  - [x] 11.1 Create ScriptEngine class
+    - Implement script parsing and execution
+    - Create dedicated execution context
+    - _Requirements: 12.1_
+  - [x] 11.2 Implement Script API
+    - Implement pressKey(key) function
+    - Implement releaseKey(key) function
+    - Implement tapKey(key, ms) function
+    - Implement mouseClick(button) function
+    - Implement mouseMove(dx, dy) function
+    - Implement sleep(ms) function
+    - Implement isButtonPressed(btn) function
+    - _Requirements: 12.2, 12.3, 12.4, 12.5, 12.6, 12.7, 12.8_
+  - [x] 11.3 Write property test for script API key events
+    - **Property 12: Script API Key Events**
+    - **Validates: Requirements 12.2, 12.3, 12.4**
+  - [x] 11.4 Write property test for script API mouse events
+    - **Property 13: Script API Mouse Events**
+    - **Validates: Requirements 12.5, 12.6**
+  - [x] 11.5 Write property test for script button state query
+    - **Property 14: Script Button State Query**
+    - **Validates: Requirements 12.8**
+
+- [x] 12. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 13. Implement Controller Manager
+  - [x] 13.1 Create ControllerManager class
+    - Implement IOHIDManager setup for DualSense
+    - Implement USB device detection
+    - Implement Bluetooth device detection
+    - _Requirements: 1.1, 1.2_
+  - [x] 13.2 Implement controller state management
+    - Track connection type (USB/Bluetooth)
+    - Read battery level from HID reports
+    - Handle disconnection events
+    - Handle reconnection with profile restoration
+    - _Requirements: 1.3, 1.4, 1.5, 1.6_
+  - [x] 13.3 Implement button input reading
+    - Parse HID reports for button states
+    - Track hold duration
+    - Support all DualSense buttons
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+  - [x] 13.4 Implement axis input reading
+    - Parse HID reports for axis values
+    - Support sticks and triggers
+    - _Requirements: 3.1, 3.3_
+
+- [x] 14. Implement Profile Manager
+  - [x] 14.1 Create ProfileManager class
+    - Implement profile loading from JSON files
+    - Implement profile saving to JSON files
+    - Implement profile listing
+    - _Requirements: 13.1, 13.2, 13.5_
+  - [x] 14.2 Implement profile operations
+    - Implement profile switching with mapping deactivation
+    - Implement profile cloning with unique name
+    - _Requirements: 13.3, 13.4_
+  - [x] 14.3 Write property test for profile clone identity
+    - **Property 16: Profile Clone Identity**
+    - **Validates: Requirements 13.4**
+  - [x] 14.4 Implement application-based profile switching (optional)
+    - Monitor foreground application changes
+    - Switch profile based on bundle identifier
+    - _Requirements: 14.1, 14.2, 14.3_
+
+- [x] 15. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 16. Implement Main Window UI
+  - [x] 16.1 Create main window layout
+    - Implement controller status display (name, connection, battery)
+    - Implement profile selector dropdown
+    - _Requirements: 18.1, 18.5_
+  - [x] 16.2 Create controller visualization
+    - Create clickable controller SVG/image
+    - Implement input selection on click
+    - _Requirements: 18.2, 18.3_
+  - [x] 16.3 Create mapping detail panel
+    - Display input name, type, action, trigger mode
+    - _Requirements: 18.4_
+
+- [x] 17. Implement Mapping Editor
+  - [x] 17.1 Create mapping editor view
+    - Implement action type selector (Key, Mouse, Macro, Script)
+    - Implement immediate apply on change
+    - _Requirements: 19.1, 19.2_
+  - [x] 17.2 Implement key capture interface
+    - Capture keyboard input for key mapping
+    - Support modifier key combinations
+    - _Requirements: 19.3_
+  - [x] 17.3 Implement axis parameter editor
+    - Create input fields for deadzone, sensitivity, curve
+    - _Requirements: 19.4_
+
+- [x] 18. Implement Macro Editor
+  - [x] 18.1 Create macro recording mode
+    - Capture keyboard and mouse inputs as steps
+    - Capture timing as delay steps
+    - Provide start, stop, clear controls
+    - _Requirements: 20.1, 20.2, 20.3_
+  - [x] 18.2 Create macro step editor
+    - Allow modifying delay values
+    - Allow deleting individual steps
+    - _Requirements: 20.4, 20.5_
+  - [x] 18.3 Create script mode editor
+    - Provide text editor for script input
+    - Display syntax error indicator
+    - _Requirements: 20.6, 20.7_
+
+- [x] 19. Implement Debug Panel
+  - [x] 19.1 Create debug panel view
+    - Display real-time input events
+    - Display mapping action execution
+    - Display macro state and current step
+    - _Requirements: 15.1, 15.2, 15.3_
+  - [x] 19.2 Implement axis value display
+    - Show normalized values with 2 decimal precision
+    - _Requirements: 15.4_
+  - [x] 19.3 Write property test for debug panel axis precision
+    - **Property 17: Debug Panel Axis Precision**
+    - **Validates: Requirements 15.4**
+
+- [x] 20. Implement Permission Handling
+  - [x] 20.1 Create permission manager
+    - Check Accessibility permission status
+    - Prompt user for Accessibility permission
+    - Display limitation message when not granted
+    - _Requirements: 16.1, 16.2_
+  - [x] 20.2 Implement Bluetooth permission handling
+    - Request Bluetooth permission before BT operations
+    - _Requirements: 16.3_
+
+- [x] 21. Integration and Wiring
+  - [x] 21.1 Wire all components together
+    - Connect ControllerManager → InputProcessor → MappingEngine
+    - Connect MappingEngine → MacroScheduler/ScriptEngine → EventEmitter
+    - Connect ProfileManager → MappingEngine
+    - Connect UI components to core services
+  - [x] 21.2 Implement application lifecycle
+    - Handle app launch with permission checks
+    - Handle app termination with cleanup
+    - _Requirements: 17.4_
+
+- [x] 22. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
